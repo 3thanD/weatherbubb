@@ -291,6 +291,8 @@
             position: fixed;
             top: 0; left: 0; right: 0;
             height: var(--top-bar-height);
+            min-height: 64px; /* Backstop in case the CSS var isn't set yet */
+            flex-shrink: 0;
             background-color: var(--wb-topbar-bg);
             /* Above the sidebar (1000) and its overlay (999): position:fixed
                plus z-index makes .top-bar its own stacking context, so
@@ -351,6 +353,14 @@
             z-index: 45; /* Above the bubble canvas (30), below the top bar/sidebar */
             pointer-events: none;
         }
+        #mobile-scroll-track.side-left {
+            left: 4px;
+            right: auto;
+        }
+        /* Hidden on desktop, where the scroll bar side has nothing to affect. */
+        .mobile-only-setting {
+            display: none;
+        }
         #mobile-scroll-thumb {
             position: absolute;
             left: 0;
@@ -407,6 +417,9 @@
             }
             #mobile-scroll-track.hidden {
                 display: none;
+            }
+            .mobile-only-setting {
+                display: flex;
             }
         }
 
@@ -1037,6 +1050,13 @@
                 <label for="zoom-slider" class="slider-label">Zoom:</label>
                 <input type="range" id="zoom-slider" min="0.5" max="1.5" value="1" step="0.05">
             </div>
+            <div class="slider-container mobile-only-setting">
+                <label for="scroll-side-select" class="slider-label">Scroll Bar:</label>
+                <select id="scroll-side-select" class="bubble-input">
+                    <option value="right">Right side</option>
+                    <option value="left">Left side</option>
+                </select>
+            </div>
              <div class="bg-input-wrapper">
                  <select id="custom-bg-select" class="bubble-input">
                     <option value="">-- Preset BGs --</option>
@@ -1212,6 +1232,7 @@
         const debugCopyBtn = document.getElementById('debug-copy-btn');
         const debugClearBtn = document.getElementById('debug-clear-btn');
         const debugCloseBtn = document.getElementById('debug-close-btn');
+        const scrollSideSelect = document.getElementById('scroll-side-select');
 
 
         // --- Debug Log ---
@@ -3184,6 +3205,12 @@
             localStorage.setItem('dashboardTheme', theme);
         });
 
+        scrollSideSelect.addEventListener('change', (e) => {
+            const side = e.target.value;
+            mobileScrollTrack.classList.toggle('side-left', side === 'left');
+            localStorage.setItem('scrollBarSide', side);
+        });
+
         // Master Unlock: set every bubble's Animate checkbox on and let it float
         unlockAllBtn.addEventListener('click', () => {
             let unlocked = 0;
@@ -3376,6 +3403,10 @@
             const savedTheme = localStorage.getItem('dashboardTheme') || 'classic';
             themeSelect.value = savedTheme;
             document.body.classList.toggle('theme-bonappel', savedTheme === 'bonappel');
+
+            const savedScrollSide = localStorage.getItem('scrollBarSide') || 'right';
+            scrollSideSelect.value = savedScrollSide;
+            mobileScrollTrack.classList.toggle('side-left', savedScrollSide === 'left');
 
             const savedSpeed = parseFloat(localStorage.getItem('dashboardSpeed'));
             const initialSpeed = isNaN(savedSpeed) ? parseFloat(speedSlider.value) : savedSpeed;
