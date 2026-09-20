@@ -2471,8 +2471,10 @@
 
         async function loadBubblesState(overrideBubbles, arrangeAfter = true) {
             isLoadingState = true;
-             // Clear existing bubbles FIRST
-             clearAllBubbles();
+             // Clear existing DOM/physics bubbles FIRST, WITHOUT wiping the
+             // saved layout in localStorage that this same function is about
+             // to read a few lines down (see clearAllBubbles' comment).
+             clearAllBubbles(false);
 
             // Load background first
             const savedBg = localStorage.getItem('dashboardBackground');
@@ -2680,20 +2682,31 @@
         }
         
          // NEW: Clear All Bubbles Function
-        function clearAllBubbles() {
+        // wipeStorage=false just clears the DOM/physics state (used internally
+        // by loadBubblesState() to reset before repopulating from a saved
+        // layout). This used to always wipe localStorage['dashboardBubbles']
+        // unconditionally -- but loadBubblesState() calls this as its very
+        // first line, before it reads that same key back, so every page
+        // load/reload was silently deleting the saved layout an instant
+        // before trying to restore it. Real bubbles never survived a
+        // refresh. Only the explicit "Clear All Bubbles" button should wipe
+        // the saved layout.
+        function clearAllBubbles(wipeStorage = true) {
             // Use bubbleMap for efficient iteration
             for (const [bodyId, bubble] of bubbleMap.entries()) {
                  // Clear any running intervals!
                 if (bubble.intervalId) clearInterval(bubble.intervalId);
-                
+
                 bubbleResizeObserver.unobserve(bubble); // Stop observing
-                bubble.remove(); 
-                Composite.remove(matterWorld, Composite.get(matterWorld, bodyId, 'body')); 
+                bubble.remove();
+                Composite.remove(matterWorld, Composite.get(matterWorld, bodyId, 'body'));
             }
              bubbleMap.clear();
              reverseBubbleMap.clear();
-             localStorage.removeItem('dashboardBubbles'); // Clear saved state
-             showNotification("All bubbles cleared!", "success");
+             if (wipeStorage) {
+                 localStorage.removeItem('dashboardBubbles'); // Clear saved state
+                 showNotification("All bubbles cleared!", "success");
+             }
         }
 
 
