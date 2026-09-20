@@ -1765,6 +1765,7 @@
                         const scaleY = newHeight / oldHeight;
 
                         if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
+                            debugLog('info', `[Resize] bubble ${Math.round(oldWidth)}x${Math.round(oldHeight)} -> ${Math.round(newWidth)}x${Math.round(newHeight)} (scale ${scaleX.toFixed(2)}x/${scaleY.toFixed(2)}y)`);
                             // Update DOM size first to match visual drag
                              bubble.style.width = `${newWidth}px`;
                              bubble.style.height = `${newHeight}px`;
@@ -1805,6 +1806,23 @@
             // can add/remove a bubble (create, close, clear, load, presets)
             // is more fragile than just polling a few cheap number reads.
             setInterval(updateMobileScrollIndicator, 500);
+
+            // Distinguishes a real layout/DOM problem from a pure paint/
+            // compositing glitch, which no amount of JS logging can see
+            // (the DOM and its geometry stay completely correct; only what
+            // gets drawn on screen is briefly wrong). If this never logs
+            // anything even while the bar visually vanishes, that's
+            // itself useful evidence -- it means the layout is fine and
+            // it's purely a rendering-layer issue.
+            let lastTopBarOk = true;
+            setInterval(() => {
+                const rect = document.querySelector('.top-bar').getBoundingClientRect();
+                const ok = rect.height >= 40 && rect.top === 0 && rect.width > 0;
+                if (ok !== lastTopBarOk) {
+                    debugLog(ok ? 'info' : 'error', `[Layout] .top-bar ${ok ? 'back to normal' : 'COLLAPSED'}: ${Math.round(rect.width)}x${Math.round(rect.height)} at (${Math.round(rect.left)},${Math.round(rect.top)})`);
+                    lastTopBarOk = ok;
+                }
+            }, 400);
 
             initWindGust();
 
@@ -2072,8 +2090,14 @@
             contentWrapper.querySelectorAll('.forecast-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const targetClass = btn.dataset.target;
+                    const beforeHeight = Math.round(contentWrapper.closest('.bubble').getBoundingClientRect().height);
+                    debugLog('info', `[UI] "${btn.textContent}" clicked (bubble height before: ${beforeHeight}px)`);
                     currentView.classList.toggle('hidden', targetClass !== 'current-weather-view');
                     forecastView.classList.toggle('hidden', targetClass !== 'forecast-view');
+                    requestAnimationFrame(() => {
+                        const afterHeight = Math.round(contentWrapper.closest('.bubble').getBoundingClientRect().height);
+                        debugLog('info', `[UI] view switched to "${targetClass}" (bubble height after: ${afterHeight}px)`);
+                    });
                 });
             });
         }
@@ -3331,6 +3355,7 @@
          menuToggleBtn.addEventListener('click', () => {
              sidebar.classList.toggle('open');
              sidebarOverlay.classList.toggle('visible');
+             debugLog('info', `[UI] Hamburger clicked -- sidebar now ${sidebar.classList.contains('open') ? 'open' : 'closed'}`);
          });
          sidebarOverlay.addEventListener('click', () => {
              sidebar.classList.remove('open');
