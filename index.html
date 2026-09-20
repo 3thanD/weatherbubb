@@ -1270,8 +1270,8 @@
             bubble.style.width = `${data.width || BUBBLE_DEFAULT_WIDTH}px`;
             bubble.style.height = `${data.height || defaultHeight}px`;
             
-             // Default to static (animate unchecked) unless loaded otherwise
-            const isStatic = data.isStatic === undefined ? true : data.isStatic;
+             // Default to dynamic/draggable (animate checked) unless loaded otherwise
+            const isStatic = data.isStatic === undefined ? false : data.isStatic;
             
             bubble.innerHTML = `
                 <div class="bubble-header">
@@ -1966,7 +1966,7 @@
             data.height = Math.max(BUBBLE_MIN_HEIGHT * zoom, data.height);
 
             
-             data.isStatic = data.isStatic === undefined ? true : data.isStatic; // Default to static
+             data.isStatic = data.isStatic === undefined ? false : data.isStatic; // Default to dynamic/draggable
             data.isSleeping = data.isSleeping || false; // NEW: Save sleep state
             bubble.isSleeping = data.isSleeping; // Store on DOM element for quick access
             bubble.dataset.bubbleData = JSON.stringify(data);
