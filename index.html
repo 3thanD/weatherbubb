@@ -1233,19 +1233,38 @@
         // proxies are tried in order so a single proxy having a bad day (or a
         // stale cached error for one specific query, e.g. one stock ticker)
         // doesn't take down the whole feature.
+        // Fetches `url` with a bounded time window so one hung request can't
+        // stall a whole fallback chain.
+        async function fetchWithTimeout(url, ms = 8000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), ms);
+            try {
+                return await fetch(url, { signal: controller.signal });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
         async function fetchViaProxy(targetUrl) {
             const proxyBuilders = [
+                // Try the target directly first, no proxy at all -- costs
+                // nothing extra when it (predictably) fails on CORS, and
+                // costs nothing to maintain if that target ever adds CORS
+                // support later.
+                (u) => u,
                 (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
                 (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+                (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+                (u) => `https://thingproxy.freeboard.io/fetch/${u}`, // wants the raw URL, not encoded
             ];
             let lastError;
             for (const buildProxyUrl of proxyBuilders) {
                 try {
-                    const response = await fetch(buildProxyUrl(targetUrl));
+                    const response = await fetchWithTimeout(buildProxyUrl(targetUrl));
                     if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
                     const text = await response.text();
                     // allorigins wraps the target response as {contents: "..."};
-                    // corsproxy.io passes it through raw. Unwrap only if it
+                    // the others pass it through raw. Unwrap only if it
                     // actually looks like the allorigins envelope.
                     try {
                         const asJson = JSON.parse(text);
