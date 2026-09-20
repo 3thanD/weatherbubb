@@ -1393,6 +1393,12 @@
         }
         
         // News (via rss2json proxy)
+        // Fetches the raw Google News RSS feed through fetchViaProxy()'s
+        // direct-then-5-proxy fallback chain and parses the XML itself,
+        // instead of a single unproxied call to rss2json.com with no
+        // fallback at all if that one specific relay service has a bad
+        // moment (as observed live: it failed while a direct-CORS API,
+        // CoinGecko, succeeded at the same time).
         async function getNewsData(topic) {
             const feeds = {
                 world: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=w',
@@ -1402,11 +1408,29 @@
                 science: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=s'
             };
             const rssUrl = feeds[topic] || feeds.world;
-            const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
-            if (!response.ok) throw new Error("Could not fetch news.");
-            const data = await response.json();
-            if (data.status !== 'ok') throw new Error("News feed failed.");
-            return data.items.slice(0, 10); // Get top 10 articles
+
+            let xmlText;
+            try {
+                xmlText = await fetchViaProxy(rssUrl);
+            } catch (e) {
+                throw new Error("Could not fetch news.");
+            }
+
+            let xmlDoc;
+            try {
+                xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
+                if (xmlDoc.querySelector('parsererror')) throw new Error('XML parse error');
+            } catch (e) {
+                console.error("Failed to parse news RSS:", xmlText?.slice(0, 200));
+                throw new Error("News feed returned invalid data.");
+            }
+
+            const items = Array.from(xmlDoc.querySelectorAll('item')).slice(0, 10).map(item => ({
+                title: item.querySelector('title')?.textContent || 'Untitled',
+                link: item.querySelector('link')?.textContent || '#',
+            }));
+            if (items.length === 0) throw new Error("No articles found for this topic.");
+            return items;
         }
         
         // NEW: Reddit Feed
