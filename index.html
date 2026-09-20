@@ -1255,6 +1255,11 @@
         let notificationTimeout;
         let isLoadingState = true;
         let currentScale = 1;
+        // Bumped at the start of every loadBubblesState() call and by the
+        // "Clear All Bubbles" button, so a staggered batch of bubble
+        // creations still in flight (see loadBubblesState) can tell it's
+        // been superseded and stop spawning bubbles nobody asked for anymore.
+        let loadGeneration = 0;
 
         // --- Physics Variables ---
         let matterEngine;
@@ -1390,6 +1395,16 @@
         }
 
         async function fetchViaProxy(targetUrl, label = 'fetch') {
+            // Trimmed based on real debug-log data from the live site:
+            // corsproxy.io now 401s on every request (it started requiring
+            // auth), codetabs.com burned the full 8s timeout on every
+            // single attempt without ever once succeeding, and
+            // thingproxy.freeboard.io failed in 1-10ms every time -- too
+            // fast to be a real network round trip, meaning that domain
+            // isn't resolving at all anymore. All three were pure wasted
+            // time: by the time a request reached the one proxy that
+            // actually works (allorigins), it had already burned 15-25+
+            // seconds on three guaranteed failures.
             const proxyBuilders = [
                 // Try the target directly first, no proxy at all -- costs
                 // nothing extra when it (predictably) fails on CORS, and
@@ -1397,9 +1412,6 @@
                 // support later.
                 { name: 'direct', build: (u) => u },
                 { name: 'allorigins', build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` },
-                { name: 'corsproxy.io', build: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}` },
-                { name: 'codetabs', build: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
-                { name: 'thingproxy', build: (u) => `https://thingproxy.freeboard.io/fetch/${u}` }, // wants the raw URL, not encoded
             ];
             let lastError;
             for (const proxy of proxyBuilders) {
@@ -2590,9 +2602,9 @@
             }
         }
         
-        async function createAndDisplayBubble(type, data) {
+        async function createAndDisplayBubble(type, data, expectedGeneration = null) {
             let apiData;
-            
+
             // 1. Get API data based on type
             try {
                 switch (type) {
@@ -2622,7 +2634,16 @@
                     throw error; // Stop bubble creation for others
                  }
             }
-            
+
+            // Only checked when a caller (the staggered batch loader) passed
+            // a generation to track: if Clear All (or another load/preset)
+            // has happened since this bubble's fetch started, drop it here
+            // instead of appending a "zombie" bubble the user never asked
+            // for after they'd already cleared the board.
+            if (expectedGeneration !== null && expectedGeneration !== loadGeneration) {
+                return null;
+            }
+
             // 2. Build shell
             const { bubble, contentWrapper } = await buildBubbleShell(data);
             
@@ -2859,6 +2880,7 @@
         }
 
         async function loadBubblesState(overrideBubbles, arrangeAfter = true) {
+            const myGeneration = ++loadGeneration;
             isLoadingState = true;
              // Clear existing DOM/physics bubbles FIRST, WITHOUT wiping the
              // saved layout in localStorage that this same function is about
@@ -2911,22 +2933,37 @@
                 currentScale = clampedAvgZoom; // Set initial scale
             }
             
-            const loadPromises = savedBubbles.map(bubbleDataString => {
+            // Staggered rather than a bare .map() (all fired in the same
+            // instant): the debug log showed a burst of ~9 simultaneous
+            // requests on load (every bubble's API call at once) appears to
+            // get the one working CORS proxy rate-limited -- its one
+            // success in that log took 5.7s, while several others of the
+            // exact same request just timed out. Starting each bubble's
+            // fetch ~300ms apart spreads that burst out without seriously
+            // slowing down the overall load.
+            const loadPromises = [];
+            for (let i = 0; i < savedBubbles.length; i++) {
+                if (i > 0) await new Promise(r => setTimeout(r, 300));
+                // Abandon the rest of this staggered batch if something else
+                // (Clear All, another load, a preset) has superseded it --
+                // otherwise a straggler from this batch could still land
+                // after the user already cleared the board.
+                if (myGeneration !== loadGeneration) break;
                 try {
-                    const bubbleData = JSON.parse(bubbleDataString);
+                    const bubbleData = JSON.parse(savedBubbles[i]);
                     // Ensure loaded bubbles respect the min size (scaled by current zoom)
                      bubbleData.width = Math.max(BUBBLE_MIN_WIDTH * currentScale, bubbleData.width || BUBBLE_DEFAULT_WIDTH * currentScale);
                      bubbleData.height = Math.max(BUBBLE_MIN_HEIGHT * currentScale, bubbleData.height || BUBBLE_DEFAULT_HEIGHT * currentScale);
 
-                    
-                    return createAndDisplayBubble(bubbleData.type, bubbleData)
-                        .catch(err => console.error(`Failed to load bubble:`, err));
+                    loadPromises.push(
+                        createAndDisplayBubble(bubbleData.type, bubbleData, myGeneration)
+                            .catch(err => console.error(`Failed to load bubble:`, err))
+                    );
                 } catch (e) {
                     console.error("Failed to parse saved bubble data:", e);
-                    return Promise.resolve();
                 }
-            });
-            
+            }
+
             await Promise.all(loadPromises);
 
             // Apply initial zoom correctly after loading all bubbles
@@ -3232,6 +3269,7 @@
         clearAllBtn.addEventListener('click', () => {
              // Basic confirmation - replace with a custom modal if needed
             if (confirm("Are you sure you want to clear all bubbles? This cannot be undone.")) {
+                 loadGeneration++; // Invalidate any staggered load still in flight
                  clearAllBubbles();
              }
         });
