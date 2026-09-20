@@ -1475,6 +1475,21 @@
             }
         }
 
+        // Our own Cloudflare Worker relay (see worker/weatherbubb-proxy.js
+        // and worker/README.md). Paste the deployed worker URL here -- e.g.
+        // 'https://weatherbubb-proxy.SUBDOMAIN.workers.dev' -- and it
+        // becomes the first proxy tried. Left empty it's simply skipped,
+        // so the app behaves exactly as before until it's filled in.
+        //
+        // This exists because every free public CORS relay the app depended
+        // on eventually failed: corsproxy.io started returning 401 on every
+        // request, codetabs burned the full timeout without ever succeeding,
+        // thingproxy's domain stopped resolving, and allorigins went to
+        // timing out on 100% of requests. A relay we control is the only
+        // durable fix. No API key is involved -- none of the upstream APIs
+        // need one, so there's nothing secret in that URL.
+        const CUSTOM_PROXY_URL = '';
+
         async function fetchViaProxy(targetUrl, label = 'fetch') {
             // Trimmed based on real debug-log data from the live site:
             // corsproxy.io now 401s on every request (it started requiring
@@ -1492,6 +1507,14 @@
                 // costs nothing to maintain if that target ever adds CORS
                 // support later.
                 { name: 'direct', build: (u) => u },
+                // Our own worker, when configured. First in line after
+                // direct because it's the only relay we control.
+                ...(CUSTOM_PROXY_URL
+                    ? [{ name: 'worker', build: (u) => `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(u)}` }]
+                    : []),
+                // Kept as a last-ditch fallback only. Currently failing
+                // 100% of the time from at least one real device, so it is
+                // not something to rely on.
                 { name: 'allorigins', build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` },
             ];
             let lastError;
