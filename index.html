@@ -236,22 +236,15 @@
             cursor: pointer;
         }
         
-        /* Ad Slot / Border Styles */
-        .ad-slot {
+        /* Top Bar */
+        .top-bar {
             position: fixed;
+            top: 0; left: 0; right: 0;
+            height: var(--top-bar-height);
             background-color: #1f2937; /* bg-gray-800 */
             z-index: 40; /* Sit above content */
             display: flex;
             align-items: center;
-            color: #4b5563; /* text-gray-600 */
-            font-size: 0.875rem;
-            overflow: hidden;
-        }
-        .ad-slot-top {
-            top: 0; left: 0; right: 0;
-            height: var(--ad-top-height);
-            /* NEW: Flex layout for logo + ad */
-            justify-content: space-between;
             padding: 0 1rem;
         }
         /* Top Left container for logo and menu */
@@ -261,34 +254,15 @@
              gap: 1rem; /* Space between menu and logo */
              z-index: 60; /* Ensure menu button is clickable */
         }
-        .ad-slot-bottom {
-            bottom: 0; left: 0; right: 0;
-            height: var(--ad-bottom-height);
-            justify-content: center;
-        }
-        .ad-slot-left {
-            top: var(--ad-top-height); 
-            bottom: var(--ad-bottom-height);
-            left: 0;
-            width: var(--ad-side-width);
-            justify-content: center;
-        }
-        .ad-slot-right {
-            top: var(--ad-top-height);
-            bottom: var(--ad-bottom-height);
-            right: 0;
-            width: var(--ad-side-width);
-            justify-content: center;
-        }
-        
+
         /* Main content area (bubble container) */
         #main-content {
             position: fixed;
-            top: var(--ad-top-height);
-            left: var(--ad-side-width);
-            right: var(--ad-side-width);
-            bottom: var(--ad-bottom-height);
-            z-index: 30; /* Sit below ads and sidebar */
+            top: var(--top-bar-height);
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 30; /* Sit below top bar and sidebar */
         }
         
         #bubble-container {
@@ -312,8 +286,10 @@
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
-            /* Removed position: absolute */
+            /* filter: drop-shadow (not text-shadow) respects the clipped/transparent
+               fill, avoiding the smeared double-image look text-shadow produces
+               on gradient-clipped text. */
+            filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4));
         }
         
         /* NEW: Wrapper for dynamic inputs in sidebar */
@@ -589,8 +565,8 @@
         /* NEW: Sidebar Styles */
         #sidebar {
             position: fixed;
-            top: var(--ad-top-height);
-            bottom: var(--ad-bottom-height);
+            top: var(--top-bar-height);
+            bottom: 0;
             left: 0;
             width: 300px; /* Adjust width as needed */
             max-width: 80%; /* Ensure it doesn't take full screen on mobile */
@@ -671,10 +647,10 @@
 </head>
 <body class="h-screen w-full overflow-hidden">
 
-    <!-- Ad Slots / Borders -->
-    <div class="ad-slot ad-slot-top">
+    <!-- Top Bar -->
+    <div class="top-bar">
         <div class="top-left-controls">
-             <!-- NEW: Hamburger Menu Button -->
+            <!-- Hamburger Menu Button -->
             <button id="menu-toggle-btn" title="Toggle Menu">
                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                      <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -682,11 +658,7 @@
             </button>
             <div id="weatherbubb-logo">WeatherBubb</div>
         </div>
-        <div class="ad-slot-top-right"><span>Top Right Ad Slot (e.g., 468x60)</span></div>
     </div>
-    <div class="ad-slot ad-slot-bottom"><span>Bottom Ad Slot (e.g., 728x90)</span></div>
-    <div class="ad-slot ad-slot-left"><span>Left Ad Slot (e.g., 160x600)</span></div>
-    <div class="ad-slot ad-slot-right"><span>Right Ad Slot (e.g., 160x600)</span></div>
 
     <!-- NEW: Sidebar -->
     <div id="sidebar">
@@ -932,29 +904,20 @@
         const BUBBLE_TODO_HEIGHT = 300; // Height for ToDo List
 
         
-        // --- Ad/Border Sizing ---
-        const adSizing = {
-            top: 90,    // 90px height for top ad
-            bottom: 90, // 90px height for bottom ad
-            side: 160   // 160px width for side ads
-        };
-        
+        // --- Top Bar Sizing ---
+        const TOP_BAR_HEIGHT = 64; // px
+
         // Function to set CSS variables
         function updateLayoutCSS() {
             const root = document.documentElement;
-            const w = window.innerWidth;
-            
-            // Responsive logic for side ads: hide them on small screens
-            let currentSideWidth = (w < 1024) ? 0 : adSizing.side;
-            
-            root.style.setProperty('--ad-top-height', `${adSizing.top}px`);
-            root.style.setProperty('--ad-bottom-height', `${adSizing.bottom}px`);
-            root.style.setProperty('--ad-side-width', `${currentSideWidth}px`);
-            
-            // Update physics dimensions (remain the same)
-            contentWidth = window.innerWidth - (currentSideWidth * 2);
-            contentHeight = window.innerHeight - adSizing.top - adSizing.bottom;
-            
+
+            root.style.setProperty('--top-bar-height', `${TOP_BAR_HEIGHT}px`);
+
+            // Update physics dimensions: bubble canvas now fills the full
+            // viewport below the top bar (no reserved ad borders).
+            contentWidth = window.innerWidth;
+            contentHeight = window.innerHeight - TOP_BAR_HEIGHT;
+
              bubbleContainer.style.paddingTop = `0px`; // No top padding needed now
         }
 
@@ -1053,19 +1016,47 @@
             return { weatherData, locationName: location.name };
         }
 
-        // Stock (Simulated)
+        // Stock (real quotes via Yahoo Finance's public chart endpoint, routed
+        // through the same keyless CORS proxy used for quotes below -- no
+        // API key required, same reliability pattern as the rest of the app)
         async function getStockData(ticker) {
-            await new Promise(res => setTimeout(res, 200 + Math.random() * 300));
-            let price, change;
-            if (ticker === 'AAPL') price = 150 + Math.random() * 50;
-            else if (ticker === 'MSFT') price = 280 + Math.random() * 50;
-            else if (ticker === 'GOOGL') price = 130 + Math.random() * 30;
-            else if (ticker === 'AMZN') price = 120 + Math.random() * 40;
-            else if (ticker === 'TSLA') price = 200 + Math.random() * 80;
-            else price = 50 + Math.random() * 150;
-            change = (Math.random() * 5) - 2.5;
-            const changePercent = (change / (price - change)) * 100;
-            return { ticker, price: price.toFixed(2), change: change.toFixed(2), changePercent: changePercent.toFixed(2) };
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}`;
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error("Could not fetch stock data (proxy error).");
+            const proxyData = await response.json();
+
+            if (!proxyData.contents) {
+                console.error("Stock API failed, proxy response:", proxyData);
+                throw new Error("Stock API proxy failed to return content.");
+            }
+
+            let data;
+            try {
+                data = JSON.parse(proxyData.contents);
+            } catch (e) {
+                console.error("Failed to parse stock API response:", proxyData.contents);
+                throw new Error("Stock API returned invalid data.");
+            }
+
+            const meta = data?.chart?.result?.[0]?.meta;
+            if (!meta || typeof meta.regularMarketPrice !== 'number') {
+                console.error("Stock API failed, response:", data);
+                throw new Error(`Could not find quote for "${ticker}". Check the ticker symbol.`);
+            }
+
+            const price = meta.regularMarketPrice;
+            const previousClose = meta.previousClose ?? meta.chartPreviousClose ?? price;
+            const change = price - previousClose;
+            const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+
+            return {
+                ticker: meta.symbol || ticker,
+                price: price.toFixed(2),
+                change: change.toFixed(2),
+                changePercent: changePercent.toFixed(2),
+            };
         }
         
         // News (via rss2json proxy)
@@ -1439,7 +1430,6 @@
                         <span class="font-medium">${sign}${change}</span>
                         <span class="font-medium">${sign}${changePercent}%</span>
                     </div>
-                    <p class="text-xs text-gray-400 mt-4">(Simulated data)</p>
                 </div>
             `;
         }
