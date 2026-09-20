@@ -302,6 +302,16 @@
                The bar never visually overlaps the sidebar (which starts
                below it), so raising this is safe. */
             z-index: 1002;
+            /* Force this onto its own GPU compositing layer -- see the
+               matching note on #sidebar for why (a reported hamburger/logo
+               disappearance, likely a known iOS Safari fixed-position-
+               during-large-reflow bug, first reproduced by clicking
+               "Show 7-Day" -- the single biggest content-height jump in
+               the app). transform:translateZ(0) with no actual offset is
+               the standard trigger for this, since it doesn't visually
+               move anything. */
+            transform: translateZ(0);
+            will-change: transform;
             display: flex;
             align-items: center;
             padding: 0 1rem;
@@ -352,6 +362,8 @@
             background: rgba(255, 255, 255, 0.1);
             z-index: 45; /* Above the bubble canvas (30), below the top bar/sidebar */
             pointer-events: none;
+            transform: translateZ(0); /* Own compositing layer -- see .top-bar's note */
+            will-change: transform;
         }
         #mobile-scroll-track.side-left {
             left: 4px;
@@ -724,8 +736,18 @@
             color: var(--wb-sidebar-text);
             padding: 1.5rem;
             box-shadow: 4px 0px 15px rgba(0,0,0,0.3);
-            transform: translateX(-100%);
+            transform: translate3d(-100%, 0, 0);
             transition: transform 0.3s ease-in-out, background 0.3s ease;
+            /* translate3d (not translateX) plus will-change forces this
+               fixed-position panel onto its own GPU compositing layer.
+               Reported: fixed elements (this sidebar's own toggle button,
+               the top bar) could visually vanish after a large page
+               reflow -- iOS Safari has a known history of dropping/
+               misplacing position:fixed elements during a big reflow
+               when they're being repainted as part of the main layer
+               instead of composited independently. Forcing that
+               independent layer up front is the standard fix. */
+            will-change: transform;
             z-index: 1000;
             overflow-y: auto; /* Allow scrolling within sidebar */
             display: flex;
@@ -733,7 +755,7 @@
             gap: 1.5rem; /* Space out sections */
         }
         #sidebar.open {
-            transform: translateX(0);
+            transform: translate3d(0, 0, 0);
         }
         #sidebar h2 {
             font-size: 1.25rem; /* text-xl */
@@ -823,11 +845,12 @@
             z-index: 1500; /* Above the sidebar/overlay/modal */
             display: flex;
             flex-direction: column;
-            transform: translateY(100%);
+            transform: translate3d(0, 100%, 0); /* Own compositing layer -- see .top-bar's note */
+            will-change: transform;
             transition: transform 0.25s ease;
         }
         #debug-panel.visible {
-            transform: translateY(0);
+            transform: translate3d(0, 0, 0);
         }
         #debug-panel-header {
             display: flex;
@@ -896,6 +919,8 @@
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s ease;
+            transform: translateZ(0); /* Own compositing layer -- see .top-bar's note */
+            will-change: transform;
         }
         #sidebar-overlay.visible {
             opacity: 1;
