@@ -1312,6 +1312,41 @@
         let matterRunner;
         let matterWorld;
         let matterMouseConstraint;
+        let matterMouse;
+
+        // Matter's Mouse binds touchstart/touchmove/touchend and wheel with
+        // {passive:false} and calls preventDefault() on every one of them
+        // (see Mouse.mousemove: `e.changedTouches && (button=0,
+        // e.preventDefault())`, and Mouse.mousewheel's unconditional
+        // preventDefault). Those listeners live on #main-content, the parent
+        // of the scroll container -- so on mobile, where bubbles are a
+        // scrollable list, every scroll gesture was being cancelled before
+        // the browser could act on it. Scrolling was completely dead.
+        //
+        // On mobile the bubbles are laid out by normal document flow and
+        // their physics transform is neutralized anyway, so dragging them
+        // does nothing visible -- these handlers cost us the entire scroll
+        // gesture and buy nothing. Detach them there, keep them on desktop
+        // (where the container doesn't scroll, so preventDefault is
+        // harmless and touch-drag on a touchscreen laptop still works).
+        function syncMatterTouchHandlers() {
+            if (!matterMouse || !matterMouse.element) return;
+            const el = matterMouse.element;
+            if (isMobileViewport) {
+                el.removeEventListener('touchmove', matterMouse.mousemove);
+                el.removeEventListener('touchstart', matterMouse.mousedown);
+                el.removeEventListener('touchend', matterMouse.mouseup);
+                el.removeEventListener('wheel', matterMouse.mousewheel);
+            } else {
+                // Re-adding an identical listener is a no-op, so this is
+                // safe to call whenever the viewport crosses the breakpoint.
+                el.addEventListener('touchmove', matterMouse.mousemove, { passive: false });
+                el.addEventListener('touchstart', matterMouse.mousedown, { passive: false });
+                el.addEventListener('touchend', matterMouse.mouseup, { passive: false });
+                el.addEventListener('wheel', matterMouse.mousewheel, { passive: false });
+            }
+        }
+
         const bubbleMap = new Map(); // body.id -> bubble
         const reverseBubbleMap = new Map(); // bubble -> body.id
         let contentWidth, contentHeight;
@@ -1715,12 +1750,14 @@
             updateWalls();
             
             const mouse = Mouse.create(mainContent);
+            matterMouse = mouse;
             matterMouseConstraint = MouseConstraint.create(matterEngine, {
                 mouse: mouse,
                 constraint: { stiffness: 0.2, render: { visible: false } }
             });
             Composite.add(matterWorld, matterMouseConstraint);
-            
+            syncMatterTouchHandlers();
+
             matterRunner = Runner.create();
             Runner.run(matterRunner, matterEngine);
             
@@ -1742,21 +1779,41 @@
 
             // NEW: Resize Observer
             bubbleResizeObserver = new ResizeObserver(entries => {
+                // On mobile this whole path is not just useless but harmful.
+                // Bubbles there are sized by content (height:auto !important)
+                // and positioned by document flow, so: the height it writes
+                // is ignored, the physics rescale it performs is invisible,
+                // and -- the actual damage -- it writes those meaningless
+                // dimensions into the bubble's saved data, corrupting the
+                // stored layout with values that would later be applied on
+                // a desktop visit. The live debug log showed this firing for
+                // every single bubble (398x365 -> 396x318, over and over).
+                if (isMobileViewport) return;
                 for (let entry of entries) {
                     const bubble = entry.target;
                     const bodyId = reverseBubbleMap.get(bubble);
                     if (!bodyId) continue;
-                    
+
                     const body = Composite.get(matterWorld, bodyId, 'body');
                     // Resize handle works regardless of whether the bubble is
                     // animating -- it used to require Animate to be unchecked
                     // (isStatic) first, which made resizing a floating bubble
                     // impossible without freezing it.
                     if (body) {
+                        // Measure the BORDER box, not the content box.
+                        // body.customWidth/Height track the value written to
+                        // bubble.style.width/height, and box-sizing is
+                        // border-box, so comparing those against
+                        // contentRect (which excludes the 1px border on each
+                        // side) was an apples-to-oranges comparison that
+                        // reported a phantom 2px shrink on every observation.
+                        const borderBox = entry.borderBoxSize && entry.borderBoxSize[0];
+                        const observedWidth = borderBox ? borderBox.inlineSize : entry.contentRect.width;
+                        const observedHeight = borderBox ? borderBox.blockSize : entry.contentRect.height;
                         // Enforce min size
-                        const newWidth = Math.max(BUBBLE_MIN_WIDTH * currentScale, entry.contentRect.width); // Scale min size too
-                        const newHeight = Math.max(BUBBLE_MIN_HEIGHT * currentScale, entry.contentRect.height);
-                        
+                        const newWidth = Math.max(BUBBLE_MIN_WIDTH * currentScale, observedWidth); // Scale min size too
+                        const newHeight = Math.max(BUBBLE_MIN_HEIGHT * currentScale, observedHeight);
+
                         // Calculate scale from *current* physics body size
                         const oldWidth = body.customWidth;
                         const oldHeight = body.customHeight;
@@ -1798,6 +1855,7 @@
                 updateLayoutCSS();
                 updateWalls();
                 updateMobileScrollIndicator();
+                syncMatterTouchHandlers(); // Breakpoint may have been crossed (e.g. rotation)
             });
 
             bubbleContainer.addEventListener('scroll', updateMobileScrollIndicator);
