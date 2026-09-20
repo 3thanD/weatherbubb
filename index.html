@@ -98,6 +98,13 @@
             resize: both;
             opacity: 1; /* Default opacity */
         }
+        /* A ~15px native resize handle is a bad touch target and mobile
+           bubbles are already sized to the viewport by default (see
+           updateResponsiveBubbleDefaults() in the script), so manual
+           resize is a desktop-only affordance. */
+        @media (max-width: 640px) {
+            .bubble { resize: none !important; }
+        }
         .bubble.sleeping {
             opacity: 0.6; /* Dim when sleeping */
             box-shadow: none;
@@ -1040,15 +1047,41 @@
             return 0.065 - (speed * 0.006);
         }
         
-        // NEW: Bubble size constraints & Defaults
-        const BUBBLE_MIN_WIDTH = 180;
-        const BUBBLE_MIN_HEIGHT = 150;
-        const BUBBLE_DEFAULT_WIDTH = 240;
-        const BUBBLE_DEFAULT_HEIGHT = 220; // Increased default height
-        const BUBBLE_NEWS_HEIGHT = 360; // Larger height for feeds
-        const BUBBLE_TODO_HEIGHT = 300; // Height for ToDo List
+        // Bubble size constraints & defaults -- recomputed per viewport by
+        // updateResponsiveBubbleDefaults() (called from updateLayoutCSS(),
+        // which already runs on load and on window resize). A fixed 240px
+        // default meant two bubbles never fit side by side on a phone --
+        // they'd overlap and clip each other. Mobile gets a near-full-width
+        // default so bubbles naturally stack one per row instead.
+        const MOBILE_BREAKPOINT = 640; // px
+        let BUBBLE_MIN_WIDTH = 180;
+        let BUBBLE_MIN_HEIGHT = 150;
+        let BUBBLE_DEFAULT_WIDTH = 240;
+        let BUBBLE_DEFAULT_HEIGHT = 220;
+        let BUBBLE_NEWS_HEIGHT = 360; // Larger height for feeds
+        let BUBBLE_TODO_HEIGHT = 300; // Height for ToDo List
+        let isMobileViewport = false;
 
-        
+        function updateResponsiveBubbleDefaults() {
+            isMobileViewport = window.innerWidth < MOBILE_BREAKPOINT;
+            if (isMobileViewport) {
+                // Near-full width (minus a little breathing room on each side)
+                BUBBLE_DEFAULT_WIDTH = Math.round(Math.max(220, window.innerWidth - 32));
+                BUBBLE_MIN_WIDTH = Math.round(Math.max(180, window.innerWidth - 48));
+            } else {
+                // Gently scale with viewport width instead of one fixed
+                // number, so a small laptop and an ultrawide monitor don't
+                // get identically-sized bubbles.
+                BUBBLE_DEFAULT_WIDTH = Math.min(300, Math.max(220, Math.round(window.innerWidth / 6)));
+                BUBBLE_MIN_WIDTH = 180;
+            }
+            BUBBLE_DEFAULT_HEIGHT = Math.round(BUBBLE_DEFAULT_WIDTH * (220 / 240)); // keep the original aspect ratio
+            BUBBLE_MIN_HEIGHT = isMobileViewport ? Math.round(BUBBLE_MIN_WIDTH * (150 / 180)) : 150;
+            BUBBLE_NEWS_HEIGHT = BUBBLE_DEFAULT_HEIGHT + 140;
+            BUBBLE_TODO_HEIGHT = BUBBLE_DEFAULT_HEIGHT + 80;
+        }
+
+
         // --- Top Bar Sizing ---
         const TOP_BAR_HEIGHT = 64; // px
 
@@ -1064,6 +1097,8 @@
             contentHeight = window.innerHeight - TOP_BAR_HEIGHT;
 
              bubbleContainer.style.paddingTop = `0px`; // No top padding needed now
+
+            updateResponsiveBubbleDefaults();
         }
 
         // --- Notification Function ---
@@ -2271,15 +2306,40 @@
              if (type === 'news' || type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
              if (type === 'todo') defaultHeight = BUBBLE_TODO_HEIGHT;
              
-             // Apply size, using defaults if not present in data
-             data.width = data.width || (BUBBLE_DEFAULT_WIDTH * zoom);
-             data.height = data.height || (defaultHeight * zoom);
+             // Apply size. On mobile, always use the current responsive
+             // default and ignore any saved/legacy width -- a bubble saved
+             // (or hand-resized) at a desktop size would otherwise still be
+             // technically narrower than the phone's viewport on its own,
+             // but too small relative to the new mobile default to force a
+             // clean single-column layout, so physics still clusters
+             // several of them together looking exactly as cramped as
+             // before. Manual resize is a desktop-only affordance (see the
+             // mobile media query), so there's nothing to preserve here.
+             if (isMobileViewport) {
+                 data.width = BUBBLE_DEFAULT_WIDTH * zoom;
+                 data.height = defaultHeight * zoom;
+             } else {
+                 data.width = data.width || (BUBBLE_DEFAULT_WIDTH * zoom);
+                 data.height = data.height || (defaultHeight * zoom);
+             }
 
             // Clamp loaded sizes AFTER applying zoom factor potentially
             data.width = Math.max(BUBBLE_MIN_WIDTH * zoom, data.width);
             data.height = Math.max(BUBBLE_MIN_HEIGHT * zoom, data.height);
 
-            
+            // Never let a bubble -- freshly created, loaded from a save, or
+            // previously hand-resized -- be wider than the viewport. Without
+            // this, a layout saved (or resized) on a wide desktop window
+            // opens on a phone with bubbles wider than the screen, so two
+            // side by side overlap and clip each other's text.
+            const viewportMaxWidth = contentWidth - 16;
+            if (data.width > viewportMaxWidth) {
+                const shrink = viewportMaxWidth / data.width;
+                data.width = Math.round(viewportMaxWidth);
+                data.height = Math.round(data.height * shrink);
+            }
+
+
              data.isStatic = data.isStatic === undefined ? false : data.isStatic; // Default to dynamic/draggable
             data.isSleeping = data.isSleeping || false; // NEW: Save sleep state
             bubble.isSleeping = data.isSleeping; // Store on DOM element for quick access
@@ -2491,8 +2551,14 @@
             }
             localStorage.setItem('weatherbubbVisited', '1');
 
-            // FIX: Set zoom slider and currentScale based on saved state, THEN load bubbles
-            if (savedBubbles.length > 0) {
+            // FIX: Set zoom slider and currentScale based on saved state, THEN load bubbles.
+            // Skipped on mobile: bubble width there always follows the
+            // current responsive default (see createAndDisplayBubble),
+            // ignoring any saved width -- so inferring a "zoom" by comparing
+            // an old saved width against today's (much wider, mobile-sized)
+            // BUBBLE_DEFAULT_WIDTH would read as a huge zoom-out that the
+            // user never actually chose, and silently shrink every bubble.
+            if (savedBubbles.length > 0 && !isMobileViewport) {
                  const avgZoom = savedBubbles.reduce((acc, b) => {
                     const data = JSON.parse(b);
                     // Use a base size to calculate zoom ratio
