@@ -208,16 +208,19 @@
             display: flex;
             align-items: center;
             gap: 0.5rem; /* gap-2 */
+            width: 100%; /* Make sliders take full width in sidebar */
+            justify-content: space-between;
         }
         .slider-label {
             font-size: 0.875rem; /* text-sm */
             font-weight: 500; /* font-medium */
-            color: #d1d5db; /* text-gray-300 */
+            color: #374151; /* text-gray-700 */
+            flex-shrink: 0;
         }
         input[type=range] {
-            width: 6rem; /* w-24 */
+            width: 100%; /* Fill available space */
             height: 0.25rem; /* h-1 */
-            background-color: #374151; /* bg-gray-700 */
+            background-color: #9ca3af; /* bg-gray-400 */
             border-radius: 0.5rem; /* rounded-lg */
             -webkit-appearance: none;
             appearance: none;
@@ -251,6 +254,13 @@
             justify-content: space-between;
             padding: 0 1rem;
         }
+        /* Top Left container for logo and menu */
+        .top-left-controls {
+             display: flex;
+             align-items: center;
+             gap: 1rem; /* Space between menu and logo */
+             z-index: 60; /* Ensure menu button is clickable */
+        }
         .ad-slot-bottom {
             bottom: 0; left: 0; right: 0;
             height: var(--ad-bottom-height);
@@ -271,15 +281,14 @@
             justify-content: center;
         }
         
-        /* Main content area (control bar + bubble container) */
+        /* Main content area (bubble container) */
         #main-content {
             position: fixed;
             top: var(--ad-top-height);
             left: var(--ad-side-width);
             right: var(--ad-side-width);
             bottom: var(--ad-bottom-height);
-            /* overflow: hidden; */ /* FIX: REMOVED overflow here */
-            z-index: 30; /* Sit below ads */
+            z-index: 30; /* Sit below ads and sidebar */
         }
         
         #bubble-container {
@@ -287,56 +296,18 @@
             position: relative; 
             width: 100%;
             height: 100%;
-            padding-top: var(--control-bar-height-padded); /* Dynamic padding includes space for show button */
-            transition: padding-top 0.3s ease-in-out; /* Smooth transition */
+            /* padding-top: var(--control-bar-height-padded); */ /* REMOVED - No top bar padding */
             overflow: hidden; /* FIX: MOVED overflow here */
-            
-            /* REMOVED transform-origin and transform for zoom */
         }
         
-        /* Control bar now inside main-content */
-        #control-bar {
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            z-index: 50;
-            padding: 1rem; 
-            background: rgba(17, 24, 39, 0.8); /* Increased opacity */
-            backdrop-filter: blur(8px); /* Increased blur */
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            height: var(--control-bar-height); /* fixed height for padding-top */
-            transition: transform 0.3s ease-in-out; /* Transition transform only */
-            transform: translateY(0); /* Default visible state */
-            display: flex; /* Ensure flex for centering */
-            flex-wrap: wrap; /* Allow wrapping */
-            gap: 0.5rem; /* Smaller gap for tight space */
-            align-items: center;
-            justify-content: center;
-            overflow: hidden; /* Hide overflowing content like dropdowns when sliding */
-        }
-        #control-bar.hidden-menu {
-             transform: translateY(calc(-1 * var(--control-bar-height))); /* Slide completely off-screen */
-             box-shadow: none; /* Hide shadow when hidden */
-        }
-        /* Style for the toggle button itself */
-        #toggle-menu-btn {
-            position: absolute;
-            top: 1rem; /* Align with padding */
-            right: 1rem; /* Align with padding */
-            z-index: 51; /* Above control bar */
-            transition: transform 0.3s ease-in-out;
-        }
-         #control-bar.hidden-menu + #bubble-container #toggle-menu-btn {
-             /* When menu is hidden, move button down slightly into view */
-             transform: translateY(calc(var(--control-bar-height) - 2.5rem)); 
-         }
-
+        /* REMOVED #control-bar styles */
 
         /* WeatherBubb Logo */
         #weatherbubb-logo {
             font-family: 'Permanent Marker', cursive;
             font-size: 2.25rem; /* text-4xl */
             line-height: 1;
-            padding: 0.5rem 0.75rem;
+            padding: 0.5rem 0; /* Adjusted padding */
             background: linear-gradient(135deg, #a7f3d0, #6ee7b7); /* green-200 to green-400 */
             -webkit-background-clip: text;
             background-clip: text;
@@ -345,12 +316,23 @@
             /* Removed position: absolute */
         }
         
-        /* NEW: Wrapper for dynamic inputs */
-        .input-wrapper {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
+        /* NEW: Wrapper for dynamic inputs in sidebar */
+         #sidebar .input-wrapper {
+             width: 100%; /* Make wrappers take full width */
+             justify-content: space-between; /* Space out label/input */
+         }
+         #sidebar .input-wrapper > label { /* Style for labels if added */
+             flex-shrink: 0;
+             margin-right: 0.5rem;
+             color: #4b5563; /* text-gray-600 */
+         }
+         #sidebar .bubble-input, #sidebar select.bubble-input {
+             width: auto; /* Allow inputs to size naturally or expand */
+             flex-grow: 1;
+             background-color: #e5e7eb; /* bg-gray-200 */
+             color: #1f2937; /* text-gray-800 */
+             border-color: #9ca3af; /* border-gray-400 */
+         }
         
         /* NEW: Shared style for inputs */
         .bubble-input {
@@ -564,35 +546,154 @@
             display: flex;
             align-items: center;
             gap: 0.25rem; /* gap-1 */
+             width: 100%; /* Take full width in sidebar */
         }
-         #custom-bg-select {
-             width: 8rem; /* w-32 */
+         #sidebar #custom-bg-select {
+             width: auto; /* Adjust width */
+             flex-grow: 1;
          }
-        #custom-bg-input {
-            width: 10rem; /* w-40 */
-        }
+         #sidebar #custom-bg-input {
+             width: auto; /* Adjust width */
+             flex-grow: 2; /* Take more space */
+         }
+         #sidebar #set-bg-btn {
+             padding: 0.25rem 0.5rem; /* Match input height */
+             flex-shrink: 0;
+         }
+
         
         /* NEW: Clear All Button */
         #clear-all-btn svg {
              width: 1.1rem; /* Slightly larger */
              height: 1.1rem;
         }
+        
+        /* NEW: Hamburger Button */
+        #menu-toggle-btn {
+            background: none;
+            border: none;
+            padding: 0.5rem;
+            cursor: pointer;
+            z-index: 1001; /* Above overlay */
+        }
+        #menu-toggle-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: #e5e7eb; /* gray-200 */
+            transition: stroke 0.2s ease;
+        }
+         #menu-toggle-btn:hover svg {
+            stroke: white;
+        }
+
+        /* NEW: Sidebar Styles */
+        #sidebar {
+            position: fixed;
+            top: var(--ad-top-height);
+            bottom: var(--ad-bottom-height);
+            left: 0;
+            width: 300px; /* Adjust width as needed */
+            max-width: 80%; /* Ensure it doesn't take full screen on mobile */
+            background: linear-gradient(to bottom, #f9fafb, #e5e7eb); /* gray-50 to gray-200 */
+            color: #1f2937; /* text-gray-800 */
+            padding: 1.5rem;
+            box-shadow: 4px 0px 15px rgba(0,0,0,0.3);
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1000;
+            overflow-y: auto; /* Allow scrolling within sidebar */
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem; /* Space out sections */
+        }
+        #sidebar.open {
+            transform: translateX(0);
+        }
+        #sidebar h2 {
+            font-size: 1.25rem; /* text-xl */
+            font-weight: bold;
+            color: #111827; /* text-gray-900 */
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #d1d5db; /* border-gray-300 */
+        }
+        #sidebar .sidebar-section {
+             display: flex;
+             flex-direction: column;
+             gap: 0.75rem; /* space between items in a section */
+        }
+        #sidebar button, #sidebar a.button-style {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+            width: 100%; /* Full width buttons */
+            text-align: center;
+            text-decoration: none;
+            color: white; /* Default text color for buttons */
+        }
+        /* Style specific buttons */
+         #sidebar #create-bubble-btn { background-color: #2563eb; } /* bg-blue-600 */
+         #sidebar #create-bubble-btn:hover { background-color: #1d4ed8; } /* hover:bg-blue-700 */
+         #sidebar #arrange-bubbles-btn { background-color: #7c3aed; color: white; } /* bg-purple-600 */
+         #sidebar #arrange-bubbles-btn:hover { background-color: #6d28d9; } /* hover:bg-purple-700 */
+         #sidebar #save-layout-btn { background-color: #f59e0b; color: #1f2937; } /* bg-yellow-500 */
+         #sidebar #save-layout-btn:hover { background-color: #d97706; } /* hover:bg-yellow-600 */
+         #sidebar #load-layout-btn { background-color: #6b7280; color: white; } /* bg-gray-500 */
+         #sidebar #load-layout-btn:hover { background-color: #4b5563; } /* hover:bg-gray-600 */
+         #sidebar #clear-all-btn { background-color: #dc2626; color: white; } /* bg-red-600 */
+         #sidebar #clear-all-btn:hover { background-color: #b91c1c; } /* hover:bg-red-700 */
+         #sidebar #donate-btn { background-color: #16a34a; color: white; } /* bg-green-600 */
+         #sidebar #donate-btn:hover { background-color: #15803d; } /* hover:bg-green-700 */
+
+        
+        /* NEW: Sidebar Overlay */
+        #sidebar-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            z-index: 999; /* Below sidebar, above content */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #sidebar-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
     </style>
 </head>
 <body class="h-screen w-full overflow-hidden">
 
-    <!-- Ad Slots / Borders --><div class="ad-slot ad-slot-top">
-        <div id="weatherbubb-logo">WeatherBubb</div>
+    <!-- Ad Slots / Borders -->
+    <div class="ad-slot ad-slot-top">
+        <div class="top-left-controls">
+             <!-- NEW: Hamburger Menu Button -->
+            <button id="menu-toggle-btn" title="Toggle Menu">
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                 </svg>
+            </button>
+            <div id="weatherbubb-logo">WeatherBubb</div>
+        </div>
         <div class="ad-slot-top-right"><span>Top Right Ad Slot (e.g., 468x60)</span></div>
     </div>
     <div class="ad-slot ad-slot-bottom"><span>Bottom Ad Slot (e.g., 728x90)</span></div>
     <div class="ad-slot ad-slot-left"><span>Left Ad Slot (e.g., 160x600)</span></div>
     <div class="ad-slot ad-slot-right"><span>Right Ad Slot (e.g., 160x600)</span></div>
 
-    <!-- Main content wrapper --><div id="main-content">
-        <!-- Top control bar --><div id="control-bar">
-            
-            <!-- Type Selector --><select id="bubble-type-select" class="bubble-input">
+    <!-- NEW: Sidebar -->
+    <div id="sidebar">
+        <!-- Add Bubble Section -->
+        <div class="sidebar-section">
+            <h2>Add Bubble</h2>
+            <select id="bubble-type-select" class="bubble-input">
                 <option value="weather">Weather Bubble</option>
                 <option value="stock">Stock Ticker</option>
                 <option value="news">News Headlines</option>
@@ -608,158 +709,124 @@
                 <option value="image">Image Bubble</option>
                 <option value="todo">To-Do List</option>
                 <option value="worldClock">World Clock</option>
-                <!-- Add Unit Converter later if desired -->
             </select>
-
-            <!-- Dynamic Input Wrappers --><div id="input-container" class="flex gap-2 items-center">
-                
-                <div class="input-wrapper" data-type="weather">
-                    <input type="text" id="zip-input" placeholder="Enter Zip Code" class="bubble-input w-32">
+            <!-- Dynamic Inputs -->
+             <div id="input-container" class="flex flex-col gap-2">
+                 <div class="input-wrapper" data-type="weather">
+                     <label for="zip-input" class="slider-label">Zip Code:</label>
+                    <input type="text" id="zip-input" placeholder="Enter Zip" class="bubble-input">
                 </div>
-                
                 <div class="input-wrapper hidden" data-type="stock">
+                     <label for="stock-select" class="slider-label">Stock:</label>
                     <select id="stock-select" class="bubble-input">
-                        <option value="AAPL">Apple (AAPL)</option>
-                        <option value="MSFT">Microsoft (MSFT)</option>
-                        <option value="GOOGL">Google (GOOGL)</option>
-                        <option value="AMZN">Amazon (AMZN)</option>
-                        <option value="TSLA">Tesla (TSLA)</option>
+                        <option value="AAPL">Apple (AAPL)</option> <option value="MSFT">Microsoft (MSFT)</option> <option value="GOOGL">Google (GOOGL)</option> <option value="AMZN">Amazon (AMZN)</option> <option value="TSLA">Tesla (TSLA)</option>
                     </select>
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="news">
+                 <div class="input-wrapper hidden" data-type="news">
+                     <label for="news-topic-select" class="slider-label">Topic:</label>
                     <select id="news-topic-select" class="bubble-input">
-                        <option value="world">World News</option>
-                        <option value="business">Business</option>
-                        <option value="technology">Technology</option>
-                        <option value="entertainment">Entertainment</option>
-                        <option value="science">Science</option>
+                        <option value="world">World</option> <option value="business">Business</option> <option value="technology">Tech</option> <option value="entertainment">Entertainment</option> <option value="science">Science</option>
                     </select>
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="reddit">
-                    <input type="text" id="reddit-input" placeholder="Subreddit (e.g., aww)" class="bubble-input w-36">
+                 <div class="input-wrapper hidden" data-type="reddit">
+                     <label for="reddit-input" class="slider-label">Subreddit:</label>
+                    <input type="text" id="reddit-input" placeholder="e.g., aww" class="bubble-input">
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="crypto">
+                 <div class="input-wrapper hidden" data-type="crypto">
+                     <label for="crypto-select" class="slider-label">Coin:</label>
                     <select id="crypto-select" class="bubble-input">
-                        <option value="bitcoin">Bitcoin (BTC)</option>
-                        <option value="ethereum">Ethereum (ETH)</option>
-                        <option value="dogecoin">Dogecoin (DOGE)</option>
-                        <option value="solana">Solana (SOL)</option>
+                        <option value="bitcoin">Bitcoin</option> <option value="ethereum">Ethereum</option> <option value="dogecoin">Dogecoin</option> <option value="solana">Solana</option>
                     </select>
                 </div>
-                
                 <div class="input-wrapper hidden" data-type="quote">
+                     <label for="quote-select" class="slider-label">Quote:</label>
                     <select id="quote-select" class="bubble-input">
-                        <option value="">Any Quote</option>
-                        <!-- Note: ZenQuotes free API doesn't filter by tag -->
-                         <!-- Removed disabled options for clarity -->
+                        <option value="">Any</option>
                     </select>
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="digitalClock">
-                    <select id="timezone-select" class="bubble-input w-48"></select>
+                 <div class="input-wrapper hidden" data-type="digitalClock">
+                     <label for="timezone-select" class="slider-label">Timezone:</label>
+                    <select id="timezone-select" class="bubble-input"></select>
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="analogClock">
-                    <!-- No input needed -->
-                </div>
-                
                 <div class="input-wrapper hidden" data-type="countdown">
-                    <input type="text" id="countdown-name" placeholder="Event Name" class="bubble-input w-28">
+                     <label for="countdown-name" class="slider-label">Event:</label>
+                    <input type="text" id="countdown-name" placeholder="Name" class="bubble-input">
+                     <label for="countdown-date" class="slider-label">Date:</label>
                     <input type="date" id="countdown-date" class="bubble-input">
                 </div>
-                
                 <div class="input-wrapper hidden" data-type="timer">
-                    <input type="number" id="timer-minutes" placeholder="Minutes" class="bubble-input w-24">
+                     <label for="timer-minutes" class="slider-label">Minutes:</label>
+                    <input type="number" id="timer-minutes" placeholder="Mins" class="bubble-input">
                 </div>
-                
                 <div class="input-wrapper hidden" data-type="note">
-                    <input type="text" id="note-text" placeholder="Note text..." class="bubble-input w-32">
+                     <label for="note-text" class="slider-label">Note:</label>
+                    <input type="text" id="note-text" placeholder="Text..." class="bubble-input">
+                     <label for="note-color" class="slider-label">Color:</label>
                     <input type="color" id="note-color" value="#FFFF99" class="bubble-input h-8 w-8 p-1">
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="calculator">
-                    <!-- No input needed -->
+                 <div class="input-wrapper hidden" data-type="image">
+                     <label for="image-url" class="slider-label">Image URL:</label>
+                    <input type="text" id="image-url" placeholder="URL..." class="bubble-input">
                 </div>
-                
-                <div class="input-wrapper hidden" data-type="image">
-                    <input type="text" id="image-url" placeholder="Image URL..." class="bubble-input w-48">
+                 <div class="input-wrapper hidden" data-type="todo">
+                     <label for="todo-title" class="slider-label">List Title:</label>
+                     <input type="text" id="todo-title" placeholder="(Optional)" class="bubble-input">
                 </div>
+                 <!-- No inputs needed for analogClock, calculator, worldClock -->
+            </div>
+            <button id="create-bubble-btn">Create Bubble</button>
+        </div>
 
-                <div class="input-wrapper hidden" data-type="todo">
-                     <input type="text" id="todo-title" placeholder="List Title (optional)" class="bubble-input w-32">
-                </div>
-                 
-                 <div class="input-wrapper hidden" data-type="worldClock">
-                     <!-- No input needed -->
-                </div>
-                
-            </div>
-            
-            <button id="create-bubble-btn" 
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 text-sm rounded-lg transition-colors duration-200">
-                Create
-            </button>
-            
-            <!-- Gravity Slider --><div class="slider-container">
+        <!-- Settings Section -->
+        <div class="sidebar-section">
+            <h2>Settings</h2>
+            <div class="slider-container">
                 <label for="gravity-slider" class="slider-label">Gravity:</label>
-                <input type="range" id="gravity-slider" min="-0.5" max="0.5" value="-0.05" step="0.01"> <!-- Default slightly negative -->
+                <input type="range" id="gravity-slider" min="-0.5" max="0.5" value="-0.05" step="0.01">
             </div>
-            
-            <!-- Zoom Slider --><div class="slider-container">
+            <div class="slider-container">
                 <label for="zoom-slider" class="slider-label">Zoom:</label>
                 <input type="range" id="zoom-slider" min="0.5" max="1.5" value="1" step="0.05">
             </div>
-            
-            <!-- NEW: Custom Background Input/Select Wrapper --><div class="bg-input-wrapper">
+             <div class="bg-input-wrapper">
                  <select id="custom-bg-select" class="bubble-input">
                     <option value="">-- Preset BGs --</option>
-                    <!-- Options added dynamically by JS -->
                  </select>
-                 <input type="text" id="custom-bg-input" placeholder="Or Paste Image URL..." class="bubble-input">
-                 <button id="set-bg-btn" 
-                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-2 text-sm rounded-lg transition-colors duration-200">
-                    Set
-                 </button>
+                 <input type="text" id="custom-bg-input" placeholder="Or Paste URL..." class="bubble-input">
+                 <button id="set-bg-btn">Set</button>
              </div>
-
-
-            <!-- Arrange Bubbles Button --><button id="arrange-bubbles-btn" 
-                    title="Arrange Bubbles"
-                    class="bg-purple-600 hover:bg-purple-700 text-white font-bold p-2 text-sm rounded-lg transition-colors duration-200">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-            </button>
-
-            <!-- Save Layout Button --><button id="save-layout-btn" 
-                    class="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-3 text-sm rounded-lg transition-colors duration-200">
-                Save Layout
-            </button>
-
-            <!-- NEW: Clear All Button -->
-            <button id="clear-all-btn" 
-                    title="Clear All Bubbles"
-                    class="bg-red-600 hover:bg-red-700 text-white font-bold p-2 text-sm rounded-lg transition-colors duration-200">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-            </button>
-
-             <!-- Donate Button --><button id="donate-btn" 
-                    class="bg-green-600 hover:bg-green-700 text-white py-2 px-3 text-sm rounded-lg transition-colors duration-200">
-                Donate
-            </button>
-
-            <!-- Hide/Show Menu Button (Moved last for z-index trick) --><button id="toggle-menu-btn" 
-                    class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-3 text-sm rounded-lg transition-colors duration-200 absolute top-4 right-4"> <!-- Use absolute positioning -->
-                 Hide Menu
-            </button>
-            
         </div>
+        
+         <!-- Layout Management Section -->
+        <div class="sidebar-section">
+            <h2>Layout</h2>
+             <button id="arrange-bubbles-btn">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                   <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                 </svg>
+                 <span>Arrange Bubbles</span>
+             </button>
+            <button id="save-layout-btn">Save Layout</button>
+             <button id="load-layout-btn">Load Layout</button> <!-- NEW -->
+            <button id="clear-all-btn">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                 </svg>
+                 <span>Clear All Bubbles</span>
+             </button>
+        </div>
+        
+        <!-- Donate Section -->
+        <div class="sidebar-section">
+            <button id="donate-btn">Donate</button>
+        </div>
+    </div>
+    <!-- NEW: Sidebar Overlay -->
+    <div id="sidebar-overlay"></div>
 
+    <!-- Main content area -->
+    <div id="main-content">
+        <!-- REMOVED Control Bar -->
         <!-- Container for all bubbles --><div id="bubble-container">
             <!-- Bubbles will be dynamically added here on load --></div>
     </div>
@@ -794,26 +861,32 @@
         const bubbleContainer = document.getElementById('bubble-container');
         const notificationBox = document.getElementById('notification-box');
         const notificationMessage = document.getElementById('notification-message');
+        const mainContent = document.getElementById('main-content');
+         const menuToggleBtn = document.getElementById('menu-toggle-btn'); // NEW
+         const sidebar = document.getElementById('sidebar'); // NEW
+         const sidebarOverlay = document.getElementById('sidebar-overlay'); // NEW
+        
+         // Elements moved into sidebar
         const gravitySlider = document.getElementById('gravity-slider');
         const zoomSlider = document.getElementById('zoom-slider');
-        const mainContent = document.getElementById('main-content');
-        const controlBar = document.getElementById('control-bar');
-        const toggleMenuBtn = document.getElementById('toggle-menu-btn');
         const createBtn = document.getElementById('create-bubble-btn');
         const typeSelect = document.getElementById('bubble-type-select');
         const inputContainer = document.getElementById('input-container');
         const donateBtn = document.getElementById('donate-btn');
+        const saveLayoutBtn = document.getElementById('save-layout-btn'); 
+        const arrangeBubblesBtn = document.getElementById('arrange-bubbles-btn');
+        const customBgInput = document.getElementById('custom-bg-input'); 
+        const setBgBtn = document.getElementById('set-bg-btn'); 
+        const clearAllBtn = document.getElementById('clear-all-btn'); 
+        const customBgSelect = document.getElementById('custom-bg-select'); 
+        const loadLayoutBtn = document.getElementById('load-layout-btn'); // NEW
+
+        // Modal elements
         const modalOverlay = document.getElementById('donation-modal-overlay');
         const closeModalBtn = document.getElementById('close-modal-btn');
         const donateLink = document.getElementById('donate-link');
-        const saveLayoutBtn = document.getElementById('save-layout-btn'); 
-        const arrangeBubblesBtn = document.getElementById('arrange-bubbles-btn');
-        const customBgInput = document.getElementById('custom-bg-input'); // NEW: BG Input
-        const setBgBtn = document.getElementById('set-bg-btn'); // NEW: Set BG Button
-        const clearAllBtn = document.getElementById('clear-all-btn'); // NEW: Clear All Button
-        const customBgSelect = document.getElementById('custom-bg-select'); // NEW: BG Select
-
-        // Input elements
+        
+        // Input elements (remained the same, just accessed via sidebar scope now)
         const zipInput = document.getElementById('zip-input');
         const stockSelect = document.getElementById('stock-select');
         const newsTopicSelect = document.getElementById('news-topic-select');
@@ -827,7 +900,7 @@
         const noteText = document.getElementById('note-text');
         const noteColor = document.getElementById('note-color');
         const imageUrl = document.getElementById('image-url');
-        const todoTitleInput = document.getElementById('todo-title'); // NEW: ToDo Title
+        const todoTitleInput = document.getElementById('todo-title'); 
 
 
         let notificationTimeout;
@@ -846,8 +919,8 @@
         const reverseBubbleMap = new Map(); // bubble -> body.id
         let contentWidth, contentHeight;
         let walls = [];
-        let currentControlBarHeight = 96; // Default height for control bar
-         let isMenuHidden = false; // Track menu state
+        // let currentControlBarHeight = 96; // REMOVED - No longer needed
+         // let isMenuHidden = false; // REMOVED - Sidebar manages its own state
         let bubbleResizeObserver;
         
         // NEW: Bubble size constraints & Defaults
@@ -878,20 +951,11 @@
             root.style.setProperty('--ad-bottom-height', `${adSizing.bottom}px`);
             root.style.setProperty('--ad-side-width', `${currentSideWidth}px`);
             
-            // Update physics dimensions
+            // Update physics dimensions (remain the same)
             contentWidth = window.innerWidth - (currentSideWidth * 2);
             contentHeight = window.innerHeight - adSizing.top - adSizing.bottom;
             
-             // Determine effective control bar height for padding
-             const effectiveControlBarHeight = isMenuHidden ? 0 : currentControlBarHeight;
-             const showButtonHeight = 40; // Approx height of the show button area
-             const topPadding = isMenuHidden ? showButtonHeight : currentControlBarHeight;
-
-            // Set dynamic control bar height for its own element
-            root.style.setProperty('--control-bar-height', `${currentControlBarHeight}px`);
-             // Set padding for bubble container separately
-             root.style.setProperty('--control-bar-height-padded', `${topPadding}px`);
-             bubbleContainer.style.paddingTop = `${topPadding}px`;
+             bubbleContainer.style.paddingTop = `0px`; // No top padding needed now
         }
 
         // --- Notification Function ---
@@ -1085,7 +1149,7 @@
             
             updateWalls();
             
-            const mouse = Mouse.create(mainContent); 
+            const mouse = Mouse.create(mainContent);
             matterMouseConstraint = MouseConstraint.create(matterEngine, {
                 mouse: mouse,
                 constraint: { stiffness: 0.2, render: { visible: false } }
@@ -1171,21 +1235,19 @@
             Composite.remove(matterWorld, walls);
             const w = contentWidth;
             const wallThickness = 60; // Increased thickness for reliability
-            // FIX: Use the actual top padding for the wall position
-            const topPadding = parseFloat(bubbleContainer.style.paddingTop) || 0;
-            const h = contentHeight - topPadding; // Height available below the padded area
-
+             // FIX: Top boundary is now 0 (top of bubble container)
+            const h = contentHeight; // Full height of the container
             const wallOptions = { isStatic: true, restitution: 0.3, friction: 0.1 }; // Reduced restitution
 
             walls = [
-                // FIX: Top wall is now a thin line exactly at the calculated padding top
-                 Bodies.rectangle(w / 2, topPadding - wallThickness/2 , w + wallThickness * 2, wallThickness, wallOptions),
-                 // FIX: Bottom wall sits *at* the bottom edge of the container height
-                 Bodies.rectangle(w / 2, topPadding + h + wallThickness / 2, w + wallThickness * 2, wallThickness, wallOptions),
-                 // Left wall (adjust y position and height based on topPadding)
-                 Bodies.rectangle(-wallThickness / 2, topPadding + h / 2, wallThickness, h + wallThickness, wallOptions),
-                 // Right wall (adjust y position and height based on topPadding)
-                 Bodies.rectangle(w + wallThickness / 2, topPadding + h / 2, wallThickness, h + wallThickness, wallOptions)
+                 // Top wall (thin line at y=0)
+                 Bodies.rectangle(w / 2, -wallThickness / 2, w + wallThickness * 2, wallThickness, wallOptions),
+                 // Bottom wall (at bottom of container height)
+                 Bodies.rectangle(w / 2, h + wallThickness / 2, w + wallThickness * 2, wallThickness, wallOptions),
+                 // Left wall
+                 Bodies.rectangle(-wallThickness / 2, h / 2, wallThickness, h + wallThickness, wallOptions),
+                 // Right wall
+                 Bodies.rectangle(w + wallThickness / 2, h / 2, wallThickness, h + wallThickness, wallOptions)
             ];
             
             Composite.add(matterWorld, walls);
@@ -1340,7 +1402,7 @@
             for (let i = 0; i < 7; i++) {
                 const time = daily.time[i];
                 const day = new Date(time + 'T00:00:00-05:00').toLocaleDateString('en-US', { weekday: 'short' });
-                const dayIconName = mapWeatherCode(daily.weathercode[i]); // Use mapWeatherCode here too
+                const dayIconName = mapWeatherCode(daily.weathercode[i]).icon; // Get icon name
                 const high = Math.round(daily.temperature_2m_max[i]);
                 const low = Math.round(daily.temperature_2m_min[i]);
                 forecastHTML += `
@@ -1944,8 +2006,10 @@
             // Spawn lower down & check bounds
             const spawnPadding = 30; // Min distance from edges/top
             let x = Math.max(width/2 + spawnPadding, Math.min(contentWidth - width/2 - spawnPadding, contentWidth / 2 + (Math.random() * 50 - 25)));
-             let yTopBoundary = (isMenuHidden ? 0 : currentControlBarHeight) + height / 2 + spawnPadding;
-             let y = Math.max(yTopBoundary, currentControlBarHeight + height / 2 + 50 + (Math.random() * 50 - 25)); // Ensure below menu
+             // FIX: Calculate top boundary based on current menu state's padding
+             const topBoundaryPadding = parseFloat(bubbleContainer.style.paddingTop) || 0; 
+             let yTopBoundary = topBoundaryPadding + height / 2 + spawnPadding;
+             let y = Math.max(yTopBoundary, topBoundaryPadding + 50 + (Math.random() * 50 - 25)); // Ensure below menu or top padding
 
 
             const body = Bodies.rectangle(x, y, width, height, {
@@ -2044,6 +2108,9 @@
 
         async function loadBubblesState() {
             isLoadingState = true;
+             // Clear existing bubbles FIRST
+             clearAllBubbles(); 
+
             // Load background first
             const savedBg = localStorage.getItem('dashboardBackground');
             if (savedBg) {
@@ -2204,8 +2271,8 @@
             const padding = 20 * currentScale; // Scale padding
             const containerWidth = contentWidth;
             let x = padding;
-            // Use the correct top boundary based on menu state
-            let yTopBoundary = (isMenuHidden ? 0 : currentControlBarHeight) + padding;
+             // Use 0 as the top boundary now
+             let yTopBoundary = padding; 
             let y = yTopBoundary;
             let rowMaxHeight = 0;
 
@@ -2256,7 +2323,12 @@
 
         // --- Event Listeners ---
         
-        createBtn.addEventListener('click', handleCreateClick);
+        createBtn.addEventListener('click', () => {
+             handleCreateClick();
+             // Close sidebar after creating a bubble for better UX
+             sidebar.classList.remove('open');
+             sidebarOverlay.classList.remove('visible');
+         });
         
         typeSelect.addEventListener('change', () => {
             const selectedType = typeSelect.value;
@@ -2282,6 +2354,15 @@
             saveBubblesState();
             showNotification("Layout Saved!", "success");
         });
+        
+         // NEW: Load Layout Button
+         loadLayoutBtn.addEventListener('click', async () => {
+             if (confirm("Load saved layout? This will replace your current bubbles.")) {
+                 await loadBubblesState(); // Await the async load function
+                 showNotification("Layout Loaded!", "success");
+             }
+         });
+
         
         // NEW: Arrange Bubbles Button
         arrangeBubblesBtn.addEventListener('click', arrangeBubbles);
@@ -2322,24 +2403,23 @@
         });
 
 
-        toggleMenuBtn.addEventListener('click', () => {
-             isMenuHidden = !isMenuHidden; // Toggle state
-             controlBar.classList.toggle('hidden-menu', isMenuHidden);
-            if (isMenuHidden) {
-                toggleMenuBtn.textContent = 'Show Menu';
-                // currentControlBarHeight = 32; // Height when mostly hidden (handled by CSS transform)
-            } else {
-                toggleMenuBtn.textContent = 'Hide Menu';
-                // currentControlBarHeight = 96; // Original height (handled by CSS var)
-            }
-            updateLayoutCSS(); // Update CSS vars for padding
-             // Update walls AFTER CSS transition finishes (300ms)
-             setTimeout(updateWalls, 300); 
-        });
+         // NEW: Sidebar Toggle Logic
+         menuToggleBtn.addEventListener('click', () => {
+             sidebar.classList.toggle('open');
+             sidebarOverlay.classList.toggle('visible');
+         });
+         sidebarOverlay.addEventListener('click', () => {
+             sidebar.classList.remove('open');
+             sidebarOverlay.classList.remove('visible');
+         });
+
         
         // Modal listeners
         donateBtn.addEventListener('click', () => {
             modalOverlay.classList.add('visible');
+             // Close sidebar when opening modal
+             sidebar.classList.remove('open');
+             sidebarOverlay.classList.remove('visible');
         });
         closeModalBtn.addEventListener('click', () => {
             modalOverlay.classList.remove('visible');
