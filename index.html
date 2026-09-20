@@ -334,6 +334,39 @@
                page text underneath it. */
             user-select: none;
         }
+        /* Mobile: the free-floating physics canvas has a fixed, non-scrolling
+           viewport height (walled in on all sides) -- fine on desktop where
+           several small bubbles fit at once, but on mobile each bubble is
+           already near full width/height, so only ~2 fit before more just
+           pile up and overlap with no way to reach the rest. Below the
+           breakpoint, bubbles become a plain scrollable vertical list
+           instead: physics keeps running underneath (so nothing needs to be
+           rebuilt if the viewport crosses back over the breakpoint), but
+           each bubble's JS-driven `transform` is neutralized so normal
+           document flow stacks them, and the container scrolls natively. */
+        @media (max-width: 640px) {
+            #bubble-container {
+                overflow-y: auto;
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 16px;
+                padding: 16px 0 32px 0;
+                user-select: auto;
+            }
+            .bubble {
+                position: static !important;
+                transform: none !important;
+                flex-shrink: 0;
+            }
+            /* Gravity/Float Speed only affect free-floating motion, which
+               doesn't apply once bubbles are a static scrollable list. */
+            .physics-only-control {
+                display: none;
+            }
+        }
         
         /* REMOVED #control-bar styles */
 
@@ -876,11 +909,11 @@
                     <option value="bonappel">Bon Appel Gold</option>
                 </select>
             </div>
-            <div class="slider-container">
+            <div class="slider-container physics-only-control">
                 <label for="gravity-slider" class="slider-label">Gravity:</label>
                 <input type="range" id="gravity-slider" min="-0.5" max="0.5" value="-0.05" step="0.01">
             </div>
-            <div class="slider-container">
+            <div class="slider-container physics-only-control">
                 <label for="speed-slider" class="slider-label">Float Speed:</label>
                 <input type="range" id="speed-slider" min="1" max="10" value="5" step="1">
             </div>
@@ -1484,6 +1517,11 @@
 
         function initWindGust() {
             bubbleContainer.addEventListener('pointerdown', (e) => {
+                // Mobile is a plain scrollable list (see the CSS media query
+                // that neutralizes .bubble's transform) -- an empty-canvas
+                // drag there is the user trying to scroll, not draw a gust.
+                // preventDefault()'ing it would break native touch-scroll.
+                if (isMobileViewport) return;
                 if (e.button !== undefined && e.button !== 0) return; // Left click / primary touch only
                 if (e.target.closest('.bubble')) return; // Clicked an interactive bubble child
                 if (isPointOnABubble(e.clientX, e.clientY)) return; // Clicked a bubble's (pass-through) body area
