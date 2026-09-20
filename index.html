@@ -360,6 +360,15 @@
                 position: static !important;
                 transform: none !important;
                 flex-shrink: 0;
+                /* Height was still being forced to match the (now
+                   near-full-width) width via the original aspect ratio --
+                   e.g. ~365px for a two-line digital clock -- wasting most
+                   of the box on empty padding and fitting barely more than
+                   one bubble per screen. Size to actual content instead. */
+                height: auto !important;
+            }
+            .bubble .bubble-content-view {
+                min-height: 100px;
             }
             /* Gravity/Float Speed only affect free-floating motion, which
                doesn't apply once bubbles are a static scrollable list. */
