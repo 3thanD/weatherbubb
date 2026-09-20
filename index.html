@@ -799,6 +799,80 @@
         .joke-controls .bubble-btn { margin-top: 0; flex-shrink: 0; }
         .joke-counter { flex-shrink: 0; }
 
+        /* Debug Panel */
+        #debug-panel {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            max-height: 45vh;
+            background: rgba(10, 10, 14, 0.96);
+            border-top: 1px solid var(--wb-accent-solid);
+            box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+            z-index: 1500; /* Above the sidebar/overlay/modal */
+            display: flex;
+            flex-direction: column;
+            transform: translateY(100%);
+            transition: transform 0.25s ease;
+        }
+        #debug-panel.visible {
+            transform: translateY(0);
+        }
+        #debug-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--wb-accent-solid);
+            font-weight: 600;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+        #debug-panel-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        #debug-panel-actions button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+        }
+        #debug-panel-actions button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        #debug-close-btn {
+            font-size: 1rem !important;
+            line-height: 1;
+            padding: 0.2rem 0.5rem !important;
+        }
+        #debug-panel-body {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0.5rem 0.75rem 1rem;
+            font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+        }
+        .debug-entry {
+            padding: 0.15rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            word-break: break-word;
+            color: #d1d5db;
+        }
+        .debug-entry.debug-warn { color: #fbbf24; }
+        .debug-entry.debug-error { color: #f87171; }
+        .debug-time {
+            color: #6b7280;
+            margin-right: 0.4em;
+        }
+        #debug-panel-empty {
+            color: #6b7280;
+            font-style: italic;
+        }
+
         /* NEW: Sidebar Overlay */
         #sidebar-overlay {
             position: fixed;
@@ -1005,6 +1079,17 @@
              </button>
         </div>
         
+        <!-- Debug Section -->
+        <div class="sidebar-section">
+            <h2>Debug</h2>
+            <button id="debug-toggle-btn" title="Live error/fetch log, kept only in this browser tab">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Show Debug Log</span>
+            </button>
+        </div>
+
         <!-- Donate Section -->
         <div class="sidebar-section">
             <button id="donate-btn">Donate</button>
@@ -1027,9 +1112,24 @@
         <div id="mobile-scroll-track"><div id="mobile-scroll-thumb"></div></div>
     </div>
 
-    <!-- Custom Notification Box --><div id="notification-box" 
+    <!-- Custom Notification Box --><div id="notification-box"
          class="fixed top-24 left-1/2 transform -translate-x-1/2 -translate-y-20 p-4 rounded-lg shadow-xl text-white z-[100]">
         <span id="notification-message"></span>
+    </div>
+
+    <!-- Debug Panel: local-only live log of errors and fetch/proxy outcomes.
+         Nothing here is ever transmitted anywhere -- it's read off this
+         device and copied manually. -->
+    <div id="debug-panel">
+        <div id="debug-panel-header">
+            <span>Debug Log</span>
+            <div id="debug-panel-actions">
+                <button id="debug-copy-btn">Copy</button>
+                <button id="debug-clear-btn">Clear</button>
+                <button id="debug-close-btn" title="Close">&times;</button>
+            </div>
+        </div>
+        <div id="debug-panel-body"></div>
     </div>
 
     <!-- NEW: Donation Modal --><div id="donation-modal-overlay">
@@ -1106,7 +1206,51 @@
         const jokeCountSelect = document.getElementById('joke-count-select');
         const mobileScrollTrack = document.getElementById('mobile-scroll-track');
         const mobileScrollThumb = document.getElementById('mobile-scroll-thumb');
+        const debugPanel = document.getElementById('debug-panel');
+        const debugPanelBody = document.getElementById('debug-panel-body');
+        const debugToggleBtn = document.getElementById('debug-toggle-btn');
+        const debugCopyBtn = document.getElementById('debug-copy-btn');
+        const debugClearBtn = document.getElementById('debug-clear-btn');
+        const debugCloseBtn = document.getElementById('debug-close-btn');
 
+
+        // --- Debug Log ---
+        // Captures errors/warnings and per-attempt fetch/proxy outcomes so
+        // they can be inspected live on a real device and copied straight
+        // into a bug report, instead of relying on screenshots (which lose
+        // exact error text, timing, and which specific proxy failed).
+        // Purely local: nothing here is ever sent anywhere, it only
+        // displays in this browser tab.
+        const DEBUG_LOG_MAX = 300;
+        let debugLogEntries = [];
+        let debugPanelVisible = false;
+
+        function debugLog(level, message) {
+            debugLogEntries.push({ time: new Date(), level, message: String(message) });
+            if (debugLogEntries.length > DEBUG_LOG_MAX) debugLogEntries.shift();
+            if (debugPanelVisible) renderDebugPanel();
+        }
+
+        window.addEventListener('error', (e) => {
+            debugLog('error', `Uncaught error: ${e.message} (${e.filename ? e.filename.split('/').pop() : '?'}:${e.lineno}:${e.colno})`);
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            debugLog('error', `Unhandled promise rejection: ${e.reason && e.reason.message ? e.reason.message : e.reason}`);
+        });
+
+        // Every existing console.error/console.warn call in the app (there
+        // are many, in every API function's catch block) is picked up
+        // automatically this way, with no need to touch each call site.
+        const _origConsoleError = console.error.bind(console);
+        console.error = (...args) => {
+            _origConsoleError(...args);
+            debugLog('error', args.map(a => (a instanceof Error ? a.message : (typeof a === 'object' ? JSON.stringify(a) : String(a)))).join(' '));
+        };
+        const _origConsoleWarn = console.warn.bind(console);
+        console.warn = (...args) => {
+            _origConsoleWarn(...args);
+            debugLog('warn', args.map(a => (a instanceof Error ? a.message : (typeof a === 'object' ? JSON.stringify(a) : String(a)))).join(' '));
+        };
 
         let notificationTimeout;
         let isLoadingState = true;
@@ -1245,24 +1389,26 @@
             }
         }
 
-        async function fetchViaProxy(targetUrl) {
+        async function fetchViaProxy(targetUrl, label = 'fetch') {
             const proxyBuilders = [
                 // Try the target directly first, no proxy at all -- costs
                 // nothing extra when it (predictably) fails on CORS, and
                 // costs nothing to maintain if that target ever adds CORS
                 // support later.
-                (u) => u,
-                (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-                (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-                (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-                (u) => `https://thingproxy.freeboard.io/fetch/${u}`, // wants the raw URL, not encoded
+                { name: 'direct', build: (u) => u },
+                { name: 'allorigins', build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` },
+                { name: 'corsproxy.io', build: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}` },
+                { name: 'codetabs', build: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
+                { name: 'thingproxy', build: (u) => `https://thingproxy.freeboard.io/fetch/${u}` }, // wants the raw URL, not encoded
             ];
             let lastError;
-            for (const buildProxyUrl of proxyBuilders) {
+            for (const proxy of proxyBuilders) {
+                const startedAt = performance.now();
                 try {
-                    const response = await fetchWithTimeout(buildProxyUrl(targetUrl));
-                    if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
+                    const response = await fetchWithTimeout(proxy.build(targetUrl));
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const text = await response.text();
+                    debugLog('info', `[${label}] ${proxy.name}: OK (${Math.round(performance.now() - startedAt)}ms)`);
                     // allorigins wraps the target response as {contents: "..."};
                     // the others pass it through raw. Unwrap only if it
                     // actually looks like the allorigins envelope.
@@ -1273,9 +1419,10 @@
                     return text;
                 } catch (e) {
                     lastError = e;
-                    console.warn('Proxy failed, trying next:', e.message);
+                    debugLog('warn', `[${label}] ${proxy.name}: failed after ${Math.round(performance.now() - startedAt)}ms -- ${e.message}`);
                 }
             }
+            debugLog('error', `[${label}] All ${proxyBuilders.length} fetch attempts failed.`);
             throw lastError || new Error('All CORS proxies failed.');
         }
 
@@ -1334,13 +1481,21 @@
              return { description, icon: iconName };
         }
         async function getWeatherData(zip) {
+            const startedAt = performance.now();
             const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${zip}&count=1&language=en&format=json`);
             const geoData = await geoResponse.json();
-            if (!geoResponse.ok || !geoData.results) throw new Error("Zip code not found.");
+            if (!geoResponse.ok || !geoData.results) {
+                debugLog('warn', `[Weather:${zip}] geocoding: failed after ${Math.round(performance.now() - startedAt)}ms -- HTTP ${geoResponse.status}`);
+                throw new Error("Zip code not found.");
+            }
             const location = geoData.results[0];
             const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`;
             const weatherResponse = await fetch(weatherUrl);
-            if (!weatherResponse.ok) throw new Error("Could not fetch weather.");
+            if (!weatherResponse.ok) {
+                debugLog('warn', `[Weather:${zip}] forecast: failed after ${Math.round(performance.now() - startedAt)}ms -- HTTP ${weatherResponse.status}`);
+                throw new Error("Could not fetch weather.");
+            }
+            debugLog('info', `[Weather:${zip}] OK (${Math.round(performance.now() - startedAt)}ms)`);
             const weatherData = await weatherResponse.json();
             return { weatherData, locationName: location.name };
         }
@@ -1355,7 +1510,7 @@
 
             let raw;
             try {
-                raw = await fetchViaProxy(url);
+                raw = await fetchViaProxy(url, `Stock:${ticker}`);
             } catch (e) {
                 throw new Error("Could not fetch stock data (proxy error).");
             }
@@ -1411,7 +1566,7 @@
 
             let xmlText;
             try {
-                xmlText = await fetchViaProxy(rssUrl);
+                xmlText = await fetchViaProxy(rssUrl, `News:${topic}`);
             } catch (e) {
                 throw new Error("Could not fetch news.");
             }
@@ -1435,18 +1590,28 @@
         
         // NEW: Reddit Feed
         async function getRedditData(subreddit) {
+            const startedAt = performance.now();
             const response = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=10`);
-            if (!response.ok) throw new Error(`Could not find subreddit 'r/${subreddit}'.`);
+            if (!response.ok) {
+                debugLog('warn', `[Reddit:${subreddit}] failed after ${Math.round(performance.now() - startedAt)}ms -- HTTP ${response.status}`);
+                throw new Error(`Could not find subreddit 'r/${subreddit}'.`);
+            }
             const data = await response.json();
             if (!data.data || !data.data.children) throw new Error("Invalid Reddit data.");
+            debugLog('info', `[Reddit:${subreddit}] OK (${Math.round(performance.now() - startedAt)}ms)`);
             return data.data.children.map(post => post.data);
         }
-        
+
         // Crypto (via CoinGecko)
         async function getCryptoData(coinId) {
+            const startedAt = performance.now();
             const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`);
-            if (!response.ok) throw new Error("Could not fetch crypto data.");
+            if (!response.ok) {
+                debugLog('warn', `[Crypto:${coinId}] failed after ${Math.round(performance.now() - startedAt)}ms -- HTTP ${response.status}`);
+                throw new Error("Could not fetch crypto data.");
+            }
             const data = await response.json();
+            debugLog('info', `[Crypto:${coinId}] OK (${Math.round(performance.now() - startedAt)}ms)`);
             return data[coinId];
         }
 
@@ -1458,7 +1623,7 @@
 
             let raw;
             try {
-                raw = await fetchViaProxy(url);
+                raw = await fetchViaProxy(url, 'Quote');
             } catch (e) {
                 throw new Error("Could not fetch quote (proxy error).");
             }
@@ -3090,6 +3255,64 @@
              sidebar.classList.remove('open');
              sidebarOverlay.classList.remove('visible');
         });
+
+        // --- Debug Panel ---
+        function escapeForDebugHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        function renderDebugPanel() {
+            if (!debugPanelVisible) return;
+            if (debugLogEntries.length === 0) {
+                debugPanelBody.innerHTML = `<div id="debug-panel-empty">No entries yet. Errors and fetch attempts will appear here as they happen.</div>`;
+                return;
+            }
+            debugPanelBody.innerHTML = debugLogEntries.slice().reverse().map(entry => {
+                const timeStr = entry.time.toLocaleTimeString('en-US', { hour12: false });
+                return `<div class="debug-entry debug-${entry.level}"><span class="debug-time">${timeStr}</span>${escapeForDebugHtml(entry.message)}</div>`;
+            }).join('');
+        }
+        function formatDebugLogAsText() {
+            if (debugLogEntries.length === 0) return '(debug log is empty)';
+            return debugLogEntries.map(entry =>
+                `[${entry.time.toLocaleTimeString('en-US', { hour12: false })}] ${entry.level.toUpperCase()}: ${entry.message}`
+            ).join('\n');
+        }
+        function showDebugPanel() {
+            debugPanelVisible = true;
+            debugPanel.classList.add('visible');
+            debugToggleBtn.querySelector('span').textContent = 'Hide Debug Log';
+            localStorage.setItem('debugMode', '1');
+            renderDebugPanel();
+        }
+        function hideDebugPanel() {
+            debugPanelVisible = false;
+            debugPanel.classList.remove('visible');
+            debugToggleBtn.querySelector('span').textContent = 'Show Debug Log';
+            localStorage.removeItem('debugMode');
+        }
+        debugToggleBtn.addEventListener('click', () => {
+            if (debugPanelVisible) { hideDebugPanel(); } else {
+                showDebugPanel();
+                sidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('visible');
+            }
+        });
+        debugCloseBtn.addEventListener('click', hideDebugPanel);
+        debugClearBtn.addEventListener('click', () => {
+            debugLogEntries = [];
+            renderDebugPanel();
+        });
+        debugCopyBtn.addEventListener('click', async () => {
+            const text = formatDebugLogAsText();
+            try {
+                await navigator.clipboard.writeText(text);
+                showNotification('Debug log copied!', 'success');
+            } catch (e) {
+                showNotification('Could not copy -- clipboard access blocked.', 'error');
+            }
+        });
         closeModalBtn.addEventListener('click', () => {
             modalOverlay.classList.remove('visible');
         });
@@ -3108,6 +3331,9 @@
         });
         
         window.addEventListener('load', () => {
+            debugLog('info', `WeatherBubb loaded -- ${window.innerWidth}x${window.innerHeight}, UA: ${navigator.userAgent}`);
+            if (localStorage.getItem('debugMode') === '1') showDebugPanel();
+
             // Restore saved theme + float speed before physics/bubbles spin up
             const savedTheme = localStorage.getItem('dashboardTheme') || 'classic';
             themeSelect.value = savedTheme;
