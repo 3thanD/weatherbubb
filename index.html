@@ -106,6 +106,9 @@
         /* Make content clickable again */
         .bubble-header, .bubble-content-wrapper {
             pointer-events: auto;
+            /* Restore normal text selection inside bubble content -- only
+               the empty canvas background (for wind-gust dragging) has it off. */
+            user-select: text;
         }
 
         .bubble:active {
@@ -315,11 +318,14 @@
         
         #bubble-container {
             /* Now relative to main-content */
-            position: relative; 
+            position: relative;
             width: 100%;
             height: 100%;
             /* padding-top: var(--control-bar-height-padded); */ /* REMOVED - No top bar padding */
             overflow: hidden; /* FIX: MOVED overflow here */
+            /* A wind-gust drag (or any empty-canvas drag) shouldn't select
+               page text underneath it. */
+            user-select: none;
         }
         
         /* REMOVED #control-bar styles */
@@ -676,6 +682,21 @@
          #sidebar #clear-all-btn:hover { background-color: #b91c1c; } /* hover:bg-red-700 */
          #sidebar #donate-btn { background-color: #16a34a; color: white; } /* bg-green-600 */
          #sidebar #donate-btn:hover { background-color: #15803d; } /* hover:bg-green-700 */
+         #sidebar #load-preset-btn { background-color: #0d9488; color: white; } /* bg-teal-600 */
+         #sidebar #load-preset-btn:hover { background-color: #0f766e; } /* hover:bg-teal-700 */
+
+        /* Soap-bubble "boop": a brief brightness pulse on collision. Kept off
+           the transform property since the physics render loop drives
+           .bubble's transform every frame -- animating a different property
+           avoids fighting that. */
+        @keyframes bubble-collide-pulse {
+            0% { filter: brightness(1); }
+            35% { filter: brightness(1.4); }
+            100% { filter: brightness(1); }
+        }
+        .bubble-collide {
+            animation: bubble-collide-pulse 0.3s ease-out;
+        }
 
         /* Wind gust drag indicator */
         .wind-gust-line {
@@ -886,6 +907,14 @@
              </button>
             <button id="save-layout-btn">Save Layout</button>
              <button id="load-layout-btn">Load Layout</button> <!-- NEW -->
+             <div class="slider-container">
+                 <select id="preset-select" class="bubble-input">
+                    <option value="minimal">Minimal (Clock + Weather)</option>
+                    <option value="trader">Trader (Stocks + Crypto + News)</option>
+                    <option value="chaos">Chaos (Everything, unlocked)</option>
+                 </select>
+             </div>
+             <button id="load-preset-btn" title="Replaces your current bubbles with a ready-made set">Load Preset</button>
             <button id="clear-all-btn">
                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -961,6 +990,8 @@
         const clearAllBtn = document.getElementById('clear-all-btn');
         const customBgSelect = document.getElementById('custom-bg-select');
         const loadLayoutBtn = document.getElementById('load-layout-btn'); // NEW
+        const presetSelect = document.getElementById('preset-select');
+        const loadPresetBtn = document.getElementById('load-preset-btn');
 
         // Modal elements
         const modalOverlay = document.getElementById('donation-modal-overlay');
@@ -1359,6 +1390,19 @@
             });
 
             initWindGust();
+
+            // Soap-bubble "boop" on collision between two bubbles
+            Events.on(matterEngine, 'collisionStart', (event) => {
+                event.pairs.forEach(pair => {
+                    [pair.bodyA, pair.bodyB].forEach(body => {
+                        const el = bubbleMap.get(body.id);
+                        if (!el) return; // Not a bubble (e.g. a wall)
+                        el.classList.remove('bubble-collide');
+                        void el.offsetWidth; // Force reflow so the animation can re-trigger
+                        el.classList.add('bubble-collide');
+                    });
+                });
+            });
         }
 
         // --- Wind Gust: click-drag on empty canvas to shove floating bubbles ---
@@ -1408,6 +1452,7 @@
                 if (e.button !== undefined && e.button !== 0) return; // Left click / primary touch only
                 if (e.target.closest('.bubble')) return; // Clicked an interactive bubble child
                 if (isPointOnABubble(e.clientX, e.clientY)) return; // Clicked a bubble's (pass-through) body area
+                e.preventDefault(); // Stop the drag from selecting page text
                 gustStart = { x: e.clientX, y: e.clientY };
                 gustLineEl = document.createElement('div');
                 gustLineEl.className = 'wind-gust-line';
@@ -2390,7 +2435,41 @@
             ];
         }
 
-        async function loadBubblesState() {
+        // Ready-made bubble sets for the Presets picker.
+        function getPresetBubbles(name) {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
+            if (name === 'trader') {
+                return [
+                    JSON.stringify({ type: 'stock', ticker: 'AAPL' }),
+                    JSON.stringify({ type: 'stock', ticker: 'MSFT' }),
+                    JSON.stringify({ type: 'stock', ticker: 'GOOGL' }),
+                    JSON.stringify({ type: 'stock', ticker: 'AMZN' }),
+                    JSON.stringify({ type: 'stock', ticker: 'TSLA' }),
+                    JSON.stringify({ type: 'crypto', coinId: 'bitcoin' }),
+                    JSON.stringify({ type: 'crypto', coinId: 'ethereum' }),
+                    JSON.stringify({ type: 'news', topic: 'business' }),
+                ];
+            }
+            if (name === 'chaos') {
+                return [
+                    JSON.stringify({ type: 'digitalClock', timezone: tz, isStatic: false }),
+                    JSON.stringify({ type: 'weather', zip: '10001', isStatic: false }),
+                    JSON.stringify({ type: 'stock', ticker: 'AAPL', isStatic: false }),
+                    JSON.stringify({ type: 'stock', ticker: 'TSLA', isStatic: false }),
+                    JSON.stringify({ type: 'crypto', coinId: 'bitcoin', isStatic: false }),
+                    JSON.stringify({ type: 'quote', tag: '', isStatic: false }),
+                    JSON.stringify({ type: 'joke', category: 'Any', count: 3, isStatic: false }),
+                    JSON.stringify({ type: 'worldClock', isStatic: false }),
+                ];
+            }
+            // 'minimal' (default)
+            return [
+                JSON.stringify({ type: 'digitalClock', timezone: tz }),
+                JSON.stringify({ type: 'weather', zip: '10001' }),
+            ];
+        }
+
+        async function loadBubblesState(overrideBubbles, arrangeAfter = true) {
             isLoadingState = true;
              // Clear existing bubbles FIRST
              clearAllBubbles();
@@ -2403,9 +2482,9 @@
                 customBgSelect.value = ""; // Clear preset selection if custom URL exists
             }
 
-            let savedBubbles = JSON.parse(localStorage.getItem('dashboardBubbles') || '[]');
+            let savedBubbles = overrideBubbles || JSON.parse(localStorage.getItem('dashboardBubbles') || '[]');
             const isFirstEverVisit = !localStorage.getItem('weatherbubbVisited');
-            if (savedBubbles.length === 0 && isFirstEverVisit) {
+            if (!overrideBubbles && savedBubbles.length === 0 && isFirstEverVisit) {
                 savedBubbles = getStarterBubbles();
             }
             localStorage.setItem('weatherbubbVisited', '1');
@@ -2458,11 +2537,13 @@
 
             isLoadingState = false;
 
-            // Tidy the starter cluster into a neat row instead of the usual
-            // random scatter, so a first-time visitor's first impression isn't chaos.
-            if (isFirstEverVisit && savedBubbles.length > 0) {
+            // Tidy the starter cluster / a loaded preset into a neat row
+            // instead of the usual random scatter (skipped for the Chaos
+            // preset, which wants bubbles drifting loose from the start).
+            if ((isFirstEverVisit || overrideBubbles) && arrangeAfter && savedBubbles.length > 0) {
                 arrangeBubbles();
             }
+            if (overrideBubbles) saveBubblesState();
         }
         
         // --- Populate Timezone Select ---
@@ -2695,6 +2776,17 @@
                  await loadBubblesState(); // Await the async load function
                  showNotification("Layout Loaded!", "success");
              }
+         });
+
+         // NEW: Preset Layout Button
+         loadPresetBtn.addEventListener('click', async () => {
+             const preset = presetSelect.value;
+             if (!confirm("Load this preset? This will replace your current bubbles.")) return;
+             const bubbles = getPresetBubbles(preset);
+             await loadBubblesState(bubbles, preset !== 'chaos');
+             showNotification(`Preset loaded: ${presetSelect.options[presetSelect.selectedIndex].text}`, "success");
+             sidebar.classList.remove('open');
+             sidebarOverlay.classList.remove('visible');
          });
 
 
