@@ -334,6 +334,32 @@
                page text underneath it. */
             user-select: none;
         }
+        /* Custom mobile scroll-position indicator, declared here (BEFORE the
+           mobile media query below) so its display:block override inside
+           that media query -- same #id specificity -- correctly wins by
+           source order on mobile, instead of this unconditional rule
+           always winning regardless of viewport. */
+        #mobile-scroll-track {
+            display: none;
+            position: fixed;
+            top: calc(var(--top-bar-height) + 10px);
+            bottom: 10px;
+            right: 4px;
+            width: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            z-index: 45; /* Above the bubble canvas (30), below the top bar/sidebar */
+            pointer-events: none;
+        }
+        #mobile-scroll-thumb {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            border-radius: 2px;
+            background: var(--wb-accent-solid);
+            opacity: 0.7;
+        }
         /* Mobile: the free-floating physics canvas has a fixed, non-scrolling
            viewport height (walled in on all sides) -- fine on desktop where
            several small bubbles fit at once, but on mobile each bubble is
@@ -375,8 +401,15 @@
             .physics-only-control {
                 display: none;
             }
+            /* Shown on mobile unless JS adds .hidden (nothing to scroll). */
+            #mobile-scroll-track {
+                display: block;
+            }
+            #mobile-scroll-track.hidden {
+                display: none;
+            }
         }
-        
+
         /* REMOVED #control-bar styles */
 
         /* WeatherBubb Logo */
@@ -985,8 +1018,15 @@
         <!-- REMOVED Control Bar -->
         <!-- Container for all bubbles --><div id="bubble-container">
             <!-- Bubbles will be dynamically added here on load --></div>
+        <!-- Mobile-only custom scroll indicator: iOS Safari's native
+             scrollbar for a non-page scroll container only flashes briefly
+             during an active touch and can't be styled to stay visible, so
+             it wasn't obvious there was more content below. This is a
+             plain positioned div, kept in sync with #bubble-container's
+             scroll position in script. -->
+        <div id="mobile-scroll-track"><div id="mobile-scroll-thumb"></div></div>
     </div>
-    
+
     <!-- Custom Notification Box --><div id="notification-box" 
          class="fixed top-24 left-1/2 transform -translate-x-1/2 -translate-y-20 p-4 rounded-lg shadow-xl text-white z-[100]">
         <span id="notification-message"></span>
@@ -1064,6 +1104,8 @@
         const todoTitleInput = document.getElementById('todo-title');
         const jokeCategorySelect = document.getElementById('joke-category-select');
         const jokeCountSelect = document.getElementById('joke-count-select');
+        const mobileScrollTrack = document.getElementById('mobile-scroll-track');
+        const mobileScrollThumb = document.getElementById('mobile-scroll-thumb');
 
 
         let notificationTimeout;
@@ -1121,6 +1163,30 @@
             BUBBLE_MIN_HEIGHT = isMobileViewport ? Math.round(BUBBLE_MIN_WIDTH * (150 / 180)) : 150;
             BUBBLE_NEWS_HEIGHT = BUBBLE_DEFAULT_HEIGHT + 140;
             BUBBLE_TODO_HEIGHT = BUBBLE_DEFAULT_HEIGHT + 80;
+        }
+
+        // Keeps the custom mobile scroll-position indicator in sync. Native
+        // scrollbars for a non-page scroll container don't show persistently
+        // on iOS Safari (only a brief flash during an active touch, and it
+        // can't be restyled), so without this there's no way to tell more
+        // bubbles exist below the fold.
+        function updateMobileScrollIndicator() {
+            if (!isMobileViewport) {
+                mobileScrollTrack.classList.add('hidden');
+                return;
+            }
+            const c = bubbleContainer;
+            const scrollable = c.scrollHeight - c.clientHeight;
+            if (scrollable <= 4) {
+                mobileScrollTrack.classList.add('hidden');
+                return;
+            }
+            mobileScrollTrack.classList.remove('hidden');
+            const trackHeight = mobileScrollTrack.clientHeight;
+            const thumbHeight = Math.max(24, (c.clientHeight / c.scrollHeight) * trackHeight);
+            const thumbTop = (c.scrollTop / scrollable) * (trackHeight - thumbHeight);
+            mobileScrollThumb.style.height = `${thumbHeight}px`;
+            mobileScrollThumb.style.transform = `translateY(${thumbTop}px)`;
         }
 
 
@@ -1464,7 +1530,15 @@
             window.addEventListener('resize', () => {
                 updateLayoutCSS();
                 updateWalls();
+                updateMobileScrollIndicator();
             });
+
+            bubbleContainer.addEventListener('scroll', updateMobileScrollIndicator);
+            // Also re-check on an interval: bubbles being added/removed
+            // changes scrollHeight, and hooking every single call site that
+            // can add/remove a bubble (create, close, clear, load, presets)
+            // is more fragile than just polling a few cheap number reads.
+            setInterval(updateMobileScrollIndicator, 500);
 
             initWindGust();
 
