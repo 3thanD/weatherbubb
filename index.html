@@ -1094,6 +1094,31 @@
         }
         .commute-btn:hover { background: rgba(255,255,255,0.2); }
 
+        .prefixed-input { display: flex; align-items: stretch; }
+        .input-prefix {
+            display: flex; align-items: center; padding: 0 0.4rem;
+            font-size: 0.68rem; opacity: 0.7; white-space: nowrap;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.2); border-right: 0;
+            border-radius: 0.3rem 0 0 0.3rem;
+        }
+        .prefixed-input .bubble-input { border-radius: 0 0.3rem 0.3rem 0; min-width: 0; flex: 1; }
+
+        .feed-view { display: flex; flex-direction: column; height: 100%; padding: 0.5rem; }
+        .feed-head { display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; }
+        .feed-refresh-btn { background: none; border: 0; color: inherit; cursor: pointer; font-size: 1rem; opacity: 0.6; }
+        .feed-refresh-btn:hover { opacity: 1; }
+        .feed-list { flex: 1; overflow-y: auto; min-height: 0; margin-top: 0.25rem; }
+        .feed-row {
+            display: flex; gap: 0.4rem; align-items: baseline; color: inherit;
+            text-decoration: none; padding: 0.26rem 0.1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        a.feed-row:hover { background: rgba(255,255,255,0.07); }
+        .feed-title { flex: 1; font-size: 0.76rem; line-height: 1.25; }
+        .feed-date { flex-shrink: 0; font-size: 0.6rem; opacity: 0.5; }
+        .feed-updated { font-size: 0.62rem; opacity: 0.5; padding-top: 0.25rem; }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1216,6 +1241,7 @@
                 <option value="reddit">Reddit Feed</option>
                 <option value="crypto">Crypto Ticker</option>
                 <option value="search">Web Search</option>
+                <option value="feed">RSS Feed</option>
                 <option value="sports">Sports Scores</option>
                 <option value="currency">Currency Rates</option>
                 <option value="onthisday">On This Day</option>
@@ -1278,7 +1304,13 @@
                 </div>
                  <div class="input-wrapper hidden" data-type="reddit">
                      <label for="reddit-input" class="slider-label">Subreddit:</label>
-                    <input type="text" id="reddit-input" placeholder="e.g., aww" class="bubble-input">
+                    <div class="prefixed-input">
+                        <span class="input-prefix">reddit.com/r/</span>
+                        <input type="text" id="reddit-input" placeholder="SipsTea" class="bubble-input" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    </div>
+                    <p class="field-hint">Just the name &mdash; the
+                       <strong>reddit.com/r/</strong> part is added for you.
+                       Pasting a full link works too.</p>
                 </div>
                  <div class="input-wrapper hidden" data-type="crypto">
                      <label for="crypto-input" class="slider-label">Coin:</label>
@@ -1331,6 +1363,15 @@
                  <div class="input-wrapper hidden" data-type="image">
                      <label for="image-url" class="slider-label">Image URL:</label>
                     <input type="text" id="image-url" placeholder="URL..." class="bubble-input">
+                </div>
+                 <div class="input-wrapper hidden" data-type="feed">
+                     <label for="feed-url-input" class="slider-label">Feed URL:</label>
+                     <input type="text" id="feed-url-input" class="bubble-input"
+                            placeholder="https://example.com/rss.xml" autocapitalize="off" autocorrect="off" spellcheck="false">
+                     <label for="feed-title-input" class="slider-label">Title:</label>
+                     <input type="text" id="feed-title-input" class="bubble-input" placeholder="(Optional)">
+                     <p class="field-hint">Any RSS or Atom feed. Reddit works too:
+                        <strong>reddit.com/r/SipsTea/.rss</strong></p>
                 </div>
                  <div class="input-wrapper hidden" data-type="sports">
                      <label for="sports-league-select" class="slider-label">League:</label>
@@ -1659,6 +1700,8 @@
         const linksTitleInput = document.getElementById('links-title');
         const searchEngineSelect = document.getElementById('search-engine-select');
         const sportsLeagueSelect = document.getElementById('sports-league-select');
+        const feedUrlInput = document.getElementById('feed-url-input');
+        const feedTitleInput = document.getElementById('feed-title-input');
         const currencyBaseInput = document.getElementById('currency-base');
         const currencyTargetsInput = document.getElementById('currency-targets');
         const commuteFromInput = document.getElementById('commute-from');
@@ -1939,7 +1982,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0429';
+        const BUILD_ID = '2026-09-21-0434';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2213,6 +2256,150 @@
         }
         
         // NEW: Reddit Feed
+        // Feeds can point anywhere, so they go through the relay's /feed
+        // endpoint rather than the host-allowlisted path. That endpoint is
+        // deliberately narrower than it sounds: https only, no IP literals
+        // or internal-looking names, and the response must actually be
+        // RSS/Atom or it's discarded. See worker/weatherbubb-proxy.js.
+        async function fetchViaFeedRelay(targetUrl, label) {
+            const relay = getRelayUrl();
+            const startedAt = performance.now();
+
+            // Try direct first -- plenty of feeds do send CORS headers, and
+            // that skips the relay entirely.
+            try {
+                const direct = await fetchWithTimeout(targetUrl);
+                if (direct.ok) {
+                    const text = await direct.text();
+                    debugLog('info', `[${label}] direct: OK (${Math.round(performance.now() - startedAt)}ms)`);
+                    return text;
+                }
+            } catch { /* expected for most feeds; fall through to the relay */ }
+
+            if (!relay) throw new Error('No relay configured, and this feed has no CORS headers.');
+            const res = await fetchWithTimeout(`${relay}/feed?url=${encodeURIComponent(targetUrl)}`);
+            const text = await res.text();
+            if (!res.ok) {
+                let detail = text.trim().slice(0, 160);
+                try { const j = JSON.parse(text); if (j.error) detail = j.error; } catch { }
+                throw new Error(`HTTP ${res.status} -- ${detail}`);
+            }
+            debugLog('info', `[${label}] feed relay: OK (${Math.round(performance.now() - startedAt)}ms)`);
+            return text;
+        }
+
+        // Shared RSS/Atom parsing. DOMParser rather than regex, so entities
+        // and CDATA are handled by the browser instead of by hand.
+        function parseFeedItems(xmlText, limit) {
+            const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+            if (doc.querySelector('parsererror')) throw new Error("That didn't parse as a feed.");
+            const nodes = [...doc.querySelectorAll('item, entry')];
+            if (!nodes.length) throw new Error('That feed has no items.');
+            return nodes.slice(0, limit).map(node => {
+                const get = (sel) => {
+                    const el = node.querySelector(sel);
+                    return el ? (el.textContent || '').trim() : '';
+                };
+                let link = get('link');
+                if (!link) {
+                    const alt = node.querySelector('link[href]');
+                    if (alt) link = alt.getAttribute('href') || '';
+                }
+                return {
+                    title: get('title') || '(untitled)',
+                    link,
+                    date: get('pubDate') || get('published') || get('updated') || '',
+                };
+            });
+        }
+
+        function feedTitleOf(xmlText, fallback) {
+            try {
+                const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+                const t = doc.querySelector('channel > title, feed > title');
+                return (t && t.textContent.trim()) || fallback;
+            } catch { return fallback; }
+        }
+
+        function parseRedditRss(xmlText, sub) {
+            return parseFeedItems(xmlText, REDDIT_POST_LIMIT).map(item => ({
+                title: item.title,
+                // Match the shape the JSON path returns, so one renderer
+                // handles both sources.
+                permalink: item.link.replace(/^https?:\/\/(www\.|old\.)?reddit\.com/i, ''),
+                score: 0,
+                num_comments: 0,
+                fromRss: true,
+            }));
+        }
+
+        const FEED_ITEM_LIMIT = 15;
+        const FEED_REFRESH_MS = 15 * 60 * 1000;
+
+        async function getFeedData(feedUrl) {
+            const xml = await fetchViaFeedRelay(feedUrl, `Feed:${(feedUrl || '').slice(0, 40)}`);
+            return { items: parseFeedItems(xml, FEED_ITEM_LIMIT), title: feedTitleOf(xml, '') };
+        }
+
+        function renderFeedItems(listEl, items) {
+            listEl.innerHTML = (items || []).map(item => {
+                const when = item.date ? new Date(item.date) : null;
+                const stamp = when && !isNaN(when) ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+                const inner = `<span class="feed-title">${escapeHtml(item.title)}</span>` +
+                              (stamp ? `<span class="feed-date">${escapeHtml(stamp)}</span>` : '');
+                return item.link
+                    ? `<a class="feed-row" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+                    : `<div class="feed-row">${inner}</div>`;
+            }).join('') || '<p class="text-xs text-gray-400">No items.</p>';
+        }
+
+        function buildFeedBubble(bubble, contentWrapper, feed, data) {
+            const heading = data.title || (feed && feed.title) || 'Feed';
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view feed-view">
+                    <div class="feed-head">
+                        <h3 class="text-sm font-bold">${escapeHtml(heading)}</h3>
+                        <button class="feed-refresh-btn" title="Refresh now">&#x21bb;</button>
+                    </div>
+                    <div class="feed-list"></div>
+                    <div class="feed-updated"></div>
+                </div>`;
+            const listEl = contentWrapper.querySelector('.feed-list');
+            const stamp = contentWrapper.querySelector('.feed-updated');
+            renderFeedItems(listEl, feed && feed.items);
+            stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+            async function refresh(manual) {
+                if (!manual && document.visibilityState === 'hidden') return;
+                try {
+                    const fresh = await getFeedData(data.feedUrl);
+                    renderFeedItems(listEl, fresh.items);
+                    stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                } catch (e) {
+                    debugLog('warn', `[Feed] refresh failed: ${e.message}`);
+                    stamp.textContent = `Update failed ${new Date().toLocaleTimeString()}`;
+                    if (manual) showNotification(e.message, 'error');
+                }
+            }
+            contentWrapper.querySelector('.feed-refresh-btn').addEventListener('click', () => refresh(true));
+            if (bubble.intervalId) clearInterval(bubble.intervalId);
+            bubble.intervalId = setInterval(() => refresh(false), FEED_REFRESH_MS);
+        }
+
+        // Accept everything people actually type: "SipsTea", "r/SipsTea",
+        // "/r/SipsTea", or a pasted reddit.com/r/SipsTea/ URL. Applied when
+        // the bubble is created, not only when fetching, so the stored name
+        // and the heading are the clean one -- otherwise a pasted URL shows
+        // up as "r/https://www.reddit.com/r/SipsTea/".
+        function cleanSubredditName(input) {
+            return String(input || '').trim()
+                .replace(/^https?:\/\//i, '')
+                .replace(/^(www\.|old\.|new\.)?reddit\.com/i, '')
+                .replace(/^\/?r\//i, '')
+                .replace(/\/.*$/, '')
+                .trim();
+        }
+
         const REDDIT_POST_LIMIT = 10;
 
         // Reddit used to be fetchable straight from the browser. It isn't
@@ -2221,7 +2408,7 @@
         // it contains, which is why this bubble stopped working. It goes
         // through the relay now, like the other non-CORS sources.
         async function getRedditData(subreddit) {
-            const clean = String(subreddit || '').trim().replace(/^\/?r\//i, '').replace(/\/$/, '');
+            const clean = cleanSubredditName(subreddit);
             if (!/^[A-Za-z0-9_]{2,40}$/.test(clean)) {
                 throw new Error(`"${subreddit}" isn't a valid subreddit name.`);
             }
@@ -2229,11 +2416,26 @@
             // Cache-bust so a relay-cached error for one subreddit doesn't stick.
             const url = `https://www.reddit.com/r/${clean}/hot.json?limit=${REDDIT_POST_LIMIT}&raw_json=1&_=${Date.now()}`;
 
+            // Reddit blocks datacenter IPs on its .json endpoints, so a relay
+            // request gets a 403 with an HTML block page however well-formed
+            // it is -- nothing the client can fix. Their RSS feed is served
+            // more permissively, so fall back to it rather than failing.
             let raw;
             try {
                 raw = await fetchViaProxy(url, `Reddit:${clean}`);
             } catch (e) {
-                throw new Error(`Couldn't reach Reddit for r/${clean}. Check the relay in Debug.`);
+                debugLog('warn', `[Reddit:${clean}] JSON endpoint refused, trying RSS`);
+                try {
+                    const rss = await fetchViaFeedRelay(`https://www.reddit.com/r/${clean}/hot/.rss?limit=${REDDIT_POST_LIMIT}`, `Reddit:${clean}`);
+                    const posts = parseRedditRss(rss, clean);
+                    if (posts.length) {
+                        debugLog('info', `[Reddit:${clean}] OK via RSS -- ${posts.length} posts`);
+                        return posts;
+                    }
+                } catch (rssErr) {
+                    debugLog('warn', `[Reddit:${clean}] RSS also refused: ${rssErr.message}`);
+                }
+                throw new Error(`Reddit is refusing requests for r/${clean}. It blocks relays, so this can stop working without warning.`);
             }
 
             let data;
@@ -3886,9 +4088,15 @@
                         data.topic = newsTopicSelect.value;
                         break;
                     case 'reddit':
-                        if (!redditInput.value) throw new Error("Subreddit name is required.");
-                        data.subreddit = redditInput.value;
-                        redditInput.value = '';
+                        {
+                            const sub = cleanSubredditName(redditInput.value);
+                            if (!sub) throw new Error("Enter a subreddit name, e.g. SipsTea.");
+                            if (!/^[A-Za-z0-9_]{2,40}$/.test(sub)) {
+                                throw new Error(`"${redditInput.value.trim()}" isn't a valid subreddit name.`);
+                            }
+                            data.subreddit = sub;
+                            redditInput.value = '';
+                        }
                         break;
                     case 'crypto':
                         // CoinGecko identifies coins by a lowercase slug
@@ -3938,6 +4146,16 @@
                         break;
                     case 'search':
                         data.engine = searchEngineSelect.value;
+                        break;
+                    case 'feed':
+                        {
+                            const feedUrl = normalizeLinkUrl(feedUrlInput.value);
+                            if (!feedUrl) throw new Error('Enter a full feed URL, e.g. https://example.com/rss.xml');
+                            data.feedUrl = feedUrl;
+                            data.title = feedTitleInput.value.trim();
+                            feedUrlInput.value = '';
+                            feedTitleInput.value = '';
+                        }
                         break;
                     case 'sports':
                         data.league = sportsLeagueSelect.value;
@@ -4020,6 +4238,7 @@
                 case 'image': buildImageBubble(contentWrapper, data); break;
                 case 'search': buildSearchBubble(bubble, contentWrapper, data); break;
                 case 'sports': buildSportsBubble(bubble, contentWrapper, apiData, data); break;
+                case 'feed': buildFeedBubble(bubble, contentWrapper, apiData, data); break;
                 case 'currency': buildCurrencyBubble(contentWrapper, apiData, data); break;
                 case 'onthisday': buildOnThisDayBubble(contentWrapper, apiData); break;
                 case 'commute': buildCommuteBubble(contentWrapper, data); break;
@@ -4245,6 +4464,7 @@
                 case 'crypto': return await getCryptoData(data.coinId);
                 case 'quote': return await getQuoteData(data.tag);
                 case 'sports': return await getSportsData(data.league);
+                case 'feed': return await getFeedData(data.feedUrl);
                 case 'currency': return await getCurrencyData(data.base, data.targets);
                 case 'onthisday': return await getOnThisDayData();
                 default: return data;
@@ -4344,6 +4564,7 @@
                     case 'crypto': apiData = await getCryptoData(data.coinId); break;
                     case 'quote': apiData = await getQuoteData(data.tag); break;
                     case 'sports': apiData = await getSportsData(data.league); break;
+                    case 'feed': apiData = await getFeedData(data.feedUrl); break;
                     case 'currency': apiData = await getCurrencyData(data.base, data.targets); break;
                     case 'onthisday': apiData = await getOnThisDayData(); break;
                     case 'group': apiData = data; break; // members fetch themselves
@@ -4361,7 +4582,7 @@
                  // toast that fades in 3s. That reads exactly like "this
                  // ticker doesn't load" even though other tickers work fine
                  // moments later.
-                 if (type === 'weather' || type === 'news' || type === 'reddit' || type === 'crypto' || type === 'quote' || type === 'stock' || type === 'sports' || type === 'currency' || type === 'onthisday') {
+                 if (type === 'weather' || type === 'news' || type === 'reddit' || type === 'crypto' || type === 'quote' || type === 'stock' || type === 'sports' || type === 'currency' || type === 'onthisday' || type === 'feed') {
                      apiData = { error: true, message: error.message }; // Pass error state
                  } else {
                     throw error; // Stop bubble creation for others
@@ -4388,7 +4609,7 @@
              let defaultHeight = BUBBLE_DEFAULT_HEIGHT;
              if (type === 'news' || type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
              if (type === 'todo' || type === 'links') defaultHeight = BUBBLE_TODO_HEIGHT;
-             if (type === 'sports' || type === 'onthisday') defaultHeight = BUBBLE_NEWS_HEIGHT;
+             if (type === 'sports' || type === 'onthisday' || type === 'feed') defaultHeight = BUBBLE_NEWS_HEIGHT;
              // 16:9 plus the header, so a video doesn't open letterboxed.
              // This is the block that actually decides the size -- it writes
              // data.height, which then wins over buildBubbleShell's own

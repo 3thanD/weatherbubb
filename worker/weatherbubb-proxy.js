@@ -53,6 +53,55 @@ const CACHE_SECONDS = 60;
 const UPSTREAM_TIMEOUT_MS = 10000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB
 
+// FEED MODE (/feed)
+//
+// An RSS bubble can point at any feed, so /feed can't use the fixed host
+// allowlist. That is a real widening of what this worker will fetch, and
+// it is fenced accordingly:
+//
+//   - https only, default port only (no :22, :3306, :6379 probing)
+//   - no IP literals at all, v4 or v6, so the SSRF classics
+//     (169.254.169.254, 127.0.0.1, 10.x, 192.168.x) can't be named directly
+//   - no bare hostnames, .local/.internal/.home/.lan, or anything without
+//     a public-looking TLD, which blocks intranet names
+//   - the response must actually be XML/RSS/Atom; anything else is
+//     discarded unread, so this can't be used to fetch pages or binaries
+//   - same GET-only, no-credentials, size-capped, timed-out rules as the
+//     allowlisted path, and the Origin check still applies
+//
+// What's left is "fetch a public XML document", which is worth little to
+// an abuser: no credentials are attached, so it reaches exactly what
+// they could already reach themselves. To disable it entirely, set
+// FEED_MODE_ENABLED to false -- the rest of the worker is unaffected.
+const FEED_MODE_ENABLED = true;
+
+const BLOCKED_FEED_SUFFIXES = ['.local', '.internal', '.localhost', '.home', '.lan', '.corp', '.intranet'];
+
+function feedHostRefusal(targetUrl) {
+  if (!FEED_MODE_ENABLED) return 'Feed mode is disabled.';
+  const host = targetUrl.hostname.toLowerCase();
+
+  if (targetUrl.port && targetUrl.port !== '443') return 'Feeds must use the default https port.';
+  // Bracketed IPv6, or anything that parses as a dotted IPv4.
+  if (host.startsWith('[') || /^[0-9.]+$/.test(host)) return 'Feed URLs must name a host, not an IP address.';
+  if (!host.includes('.')) return 'Feed URLs must use a fully qualified domain name.';
+  if (BLOCKED_FEED_SUFFIXES.some((s) => host === s.slice(1) || host.endsWith(s))) {
+    return 'That looks like an internal address.';
+  }
+  const tld = host.slice(host.lastIndexOf('.') + 1);
+  if (!/^[a-z]{2,}$/.test(tld)) return 'Feed URLs must use a public domain.';
+  return null;
+}
+
+function looksLikeFeed(contentType, body) {
+  const ct = (contentType || '').toLowerCase();
+  if (/(xml|rss|atom)/.test(ct)) return true;
+  // Some feeds are served as text/plain; sniff the opening tag instead of
+  // trusting a lazy content-type.
+  const head = body.slice(0, 500).toLowerCase();
+  return head.includes('<rss') || head.includes('<feed') || head.includes('<rdf:rdf') || head.includes('<?xml');
+}
+
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
@@ -126,7 +175,10 @@ export default {
       return deny(403, `Origin not allowed: ${origin || '(none sent)'}`, origin);
     }
 
-    const rawTarget = new URL(request.url).searchParams.get('url');
+    const requestUrl = new URL(request.url);
+    // /feed relaxes the host allowlist for RSS/Atom only. See FEED MODE below.
+    const feedMode = requestUrl.pathname === '/feed';
+    const rawTarget = requestUrl.searchParams.get('url');
     if (!rawTarget) {
       return deny(400, 'Missing ?url= parameter.', allowedOrigin);
     }
@@ -142,7 +194,10 @@ export default {
       return deny(400, 'Only https targets are allowed.', allowedOrigin);
     }
 
-    if (!ALLOWED_TARGET_HOSTS.has(targetUrl.hostname)) {
+    if (feedMode) {
+      const refusal = feedHostRefusal(targetUrl);
+      if (refusal) return deny(403, refusal, allowedOrigin);
+    } else if (!ALLOWED_TARGET_HOSTS.has(targetUrl.hostname)) {
       return deny(403, `Target host not allowed: ${targetUrl.hostname}`, allowedOrigin);
     }
 
@@ -177,6 +232,14 @@ export default {
     const body = await upstream.text();
     if (body.length > MAX_RESPONSE_BYTES) {
       return deny(413, 'Upstream response too large.', allowedOrigin);
+    }
+
+    // In feed mode the content-type check is a control, not a nicety: it's
+    // what keeps this from being a general-purpose fetcher for arbitrary
+    // hosts. Checked after the body is read so a mislabelled feed still
+    // works, but anything that isn't a feed is thrown away here.
+    if (feedMode && upstream.ok && !looksLikeFeed(upstream.headers.get('Content-Type'), body)) {
+      return deny(415, 'That URL did not return an RSS or Atom feed.', allowedOrigin);
     }
 
     return new Response(body, {
