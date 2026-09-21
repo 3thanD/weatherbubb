@@ -3437,6 +3437,46 @@
             return { ok: true, url: trimmed, usingDefault: false };
         }
 
+        // Fallback for relays without /health, and the more honest test in
+        // general: it exercises the exact path a bubble uses rather than a
+        // status endpoint. Separating these outcomes is the whole point --
+        // from inside fetch(), a refusal, a wrong address and a dead relay
+        // are all the same bare "Failed to fetch".
+        async function probeRelayDirectly(base, whyFallback) {
+            const target = 'https://zenquotes.io/api/random';
+            const probeUrl = `${base}?url=${encodeURIComponent(target)}`;
+            debugLog('info', `[Relay] Probing ${base} with a real request (${whyFallback}).`);
+            const startedAt = performance.now();
+            let response;
+            try {
+                response = await fetchWithTimeout(probeUrl);
+            } catch (e) {
+                const ms = Math.round(performance.now() - startedAt);
+                const msg = `Nothing usable at ${base} (${ms}ms; ${whyFallback}). Whatever answered sent no CORS headers, so the browser discarded it -- a 404 or an HTML page from the edge looks exactly like this. That means the relay script isn't what's serving this hostname.`;
+                setRelayStatus('bad', msg);
+                debugLog('error', `[Relay] ${msg} -- ${e.message}`);
+                return;
+            }
+            const ms = Math.round(performance.now() - startedAt);
+            let body = '';
+            try { body = (await response.text()).trim(); } catch { }
+
+            if (!response.ok) {
+                const looksLikeOrigin = /origin/i.test(body);
+                const msg = looksLikeOrigin
+                    ? `Relay is alive but refused this site (HTTP ${response.status}): ${body.slice(0, 180)} -- add ${window.location.origin} to ALLOWED_ORIGINS in the worker and redeploy.`
+                    : `Relay answered HTTP ${response.status} (${ms}ms): ${body.slice(0, 180)}`;
+                setRelayStatus('bad', msg);
+                debugLog('error', `[Relay] ${msg}`);
+                return;
+            }
+
+            const msg = `Relay works (${ms}ms) -- it proxied a real request and this site is accepted. It's an older build without /health, which is fine. Replied: ${body.slice(0, 80)}`;
+            setRelayStatus('ok', msg);
+            debugLog('info', `[Relay] ${msg}`);
+            showNotification('Relay is working. Refresh a stock or news bubble to use it.', 'success');
+        }
+
         // Asks the relay's /health endpoint what it is and whether it will
         // accept this origin. This distinguishes the failure modes that all
         // look identical from inside a fetch(): nothing deployed at that
@@ -3459,11 +3499,8 @@
             try {
                 response = await fetchWithTimeout(base + '/health');
             } catch (e) {
-                const ms = Math.round(performance.now() - startedAt);
-                const msg = `No readable response from ${base} (${ms}ms). Either nothing is deployed at that address, or what answered sent no CORS headers -- a 404 from the edge looks exactly like this. Open ${base}/health in a tab: a 404 page means the URL is wrong.`;
-                setRelayStatus('bad', msg);
-                debugLog('error', `[Relay] ${msg} -- ${e.message}`);
-                return;
+                debugLog('warn', `[Relay] /health unreachable (${e.message}). Falling back to a real proxy request.`);
+                return probeRelayDirectly(base, `/health was unreachable (${e.message})`);
             }
 
             const ms = Math.round(performance.now() - startedAt);
@@ -3471,19 +3508,20 @@
             try { body = (await response.text()).trim(); } catch { }
 
             if (!response.ok) {
-                const msg = `Relay answered HTTP ${response.status} (${ms}ms): ${body.slice(0, 200)}`;
-                setRelayStatus('bad', msg);
-                debugLog('error', `[Relay] ${msg}`);
-                return;
+                // /health only exists in newer relay builds. An older but
+                // otherwise working relay answers this path with an error,
+                // so a bad status here is not on its own evidence that the
+                // relay is broken -- fall back to exercising the path the
+                // app actually uses before drawing a conclusion.
+                debugLog('warn', `[Relay] /health returned HTTP ${response.status}. Falling back to a real proxy request.`);
+                return probeRelayDirectly(base, `/health returned HTTP ${response.status}`);
             }
 
             let info = null;
             try { info = JSON.parse(body); } catch { }
             if (!info || info.worker !== 'weatherbubb-proxy') {
-                const msg = `Something answered at ${base}, but it isn't the WeatherBubb relay. It replied: ${body.slice(0, 120)}`;
-                setRelayStatus('bad', msg);
-                debugLog('error', `[Relay] ${msg}`);
-                return;
+                debugLog('warn', `[Relay] /health didn't identify the relay (replied: ${body.slice(0, 120)}). Falling back to a real proxy request.`);
+                return probeRelayDirectly(base, `/health replied "${body.slice(0, 60)}"`);
             }
 
             if (!info.originAllowed) {
