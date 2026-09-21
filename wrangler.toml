@@ -27,3 +27,16 @@ compatibility_date = "2024-11-01"
 # Keep serving on weatherbubb-proxy.<subdomain>.workers.dev, which is the
 # URL the app is configured to use.
 workers_dev = true
+
+# Server-side logging. Worth having: this relay's failures are otherwise
+# invisible from the browser, which only ever sees "Failed to fetch" with
+# no status when a response lacks CORS headers. A refusal, a wrong URL
+# and a worker that never ran are identical from the client side, and
+# these logs are what tell them apart from the server side.
+#
+# Set here rather than in the dashboard on purpose. With the Worker
+# connected to this repo, the repo wins: toggling this in the dashboard
+# works until the next push quietly reverts it.
+[observability.logs]
+enabled = true
+invocation_logs = true
