@@ -98,12 +98,40 @@
             resize: both;
             opacity: 1; /* Default opacity */
         }
-        /* A ~15px native resize handle is a bad touch target and mobile
-           bubbles are already sized to the viewport by default (see
-           updateResponsiveBubbleDefaults() in the script), so manual
-           resize is a desktop-only affordance. */
+        /* The native resize grip belongs to .bubble, which is
+           pointer-events:none so that clicks fall through to the physics
+           canvas behind it (that's how a bubble gets dragged). A grip on a
+           pointer-events:none element can't be grabbed, so `resize: both`
+           above renders a corner that does nothing. Rather than give the
+           whole bubble pointer events back -- which would break dragging --
+           the grip is its own child element below, which can opt back in.
+           The native one stays off so there aren't two corners. */
+        .bubble { resize: none; }
+
+        .bubble-resize-handle {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 24px;
+            height: 24px;
+            pointer-events: auto;
+            cursor: nwse-resize;
+            touch-action: none;
+            opacity: 0.45;
+            transition: opacity 0.15s ease;
+            /* Two short diagonal strokes, the conventional grip marking. */
+            background-image: linear-gradient(135deg, transparent 0 45%, var(--wb-sidebar-text) 45% 55%, transparent 55% 100%),
+                              linear-gradient(135deg, transparent 0 65%, var(--wb-sidebar-text) 65% 75%, transparent 75% 100%);
+            border-bottom-right-radius: 1rem;
+        }
+        .bubble-resize-handle:hover,
+        .bubble-resize-handle.dragging { opacity: 0.9; }
+
+        /* A 20px grip is a poor touch target, and mobile bubbles are
+           already sized to the viewport and laid out by document flow, so
+           manual resize is a desktop-only affordance. */
         @media (max-width: 640px) {
-            .bubble { resize: none !important; }
+            .bubble-resize-handle { display: none; }
         }
         .bubble.sleeping {
             opacity: 0.6; /* Dim when sleeping */
@@ -983,10 +1011,24 @@
                     <input type="text" id="zip-input" placeholder="Enter Zip" class="bubble-input">
                 </div>
                 <div class="input-wrapper hidden" data-type="stock">
-                     <label for="stock-select" class="slider-label">Stock:</label>
-                    <select id="stock-select" class="bubble-input">
-                        <option value="AAPL">Apple (AAPL)</option> <option value="MSFT">Microsoft (MSFT)</option> <option value="GOOGL">Google (GOOGL)</option> <option value="AMZN">Amazon (AMZN)</option> <option value="TSLA">Tesla (TSLA)</option>
-                    </select>
+                     <label for="stock-input" class="slider-label">Ticker:</label>
+                     <input type="text" id="stock-input" list="stock-suggestions" class="bubble-input"
+                            placeholder="Any symbol, e.g. NVDA" maxlength="12"
+                            autocapitalize="characters" autocorrect="off" spellcheck="false">
+                     <datalist id="stock-suggestions">
+                         <option value="AAPL">Apple</option>
+                         <option value="MSFT">Microsoft</option>
+                         <option value="GOOGL">Alphabet</option>
+                         <option value="AMZN">Amazon</option>
+                         <option value="TSLA">Tesla</option>
+                         <option value="NVDA">NVIDIA</option>
+                         <option value="META">Meta</option>
+                         <option value="AMD">AMD</option>
+                         <option value="NFLX">Netflix</option>
+                         <option value="DIS">Disney</option>
+                         <option value="SPY">S&amp;P 500 ETF</option>
+                         <option value="QQQ">Nasdaq 100 ETF</option>
+                     </datalist>
                 </div>
                  <div class="input-wrapper hidden" data-type="news">
                      <label for="news-topic-select" class="slider-label">Topic:</label>
@@ -999,10 +1041,24 @@
                     <input type="text" id="reddit-input" placeholder="e.g., aww" class="bubble-input">
                 </div>
                  <div class="input-wrapper hidden" data-type="crypto">
-                     <label for="crypto-select" class="slider-label">Coin:</label>
-                    <select id="crypto-select" class="bubble-input">
-                        <option value="bitcoin">Bitcoin</option> <option value="ethereum">Ethereum</option> <option value="dogecoin">Dogecoin</option> <option value="solana">Solana</option>
-                    </select>
+                     <label for="crypto-input" class="slider-label">Coin:</label>
+                     <input type="text" id="crypto-input" list="crypto-suggestions" class="bubble-input"
+                            placeholder="Any coin, e.g. cardano" maxlength="40"
+                            autocapitalize="off" autocorrect="off" spellcheck="false">
+                     <datalist id="crypto-suggestions">
+                         <option value="bitcoin">Bitcoin (BTC)</option>
+                         <option value="ethereum">Ethereum (ETH)</option>
+                         <option value="solana">Solana (SOL)</option>
+                         <option value="dogecoin">Dogecoin (DOGE)</option>
+                         <option value="cardano">Cardano (ADA)</option>
+                         <option value="ripple">XRP</option>
+                         <option value="litecoin">Litecoin (LTC)</option>
+                         <option value="chainlink">Chainlink (LINK)</option>
+                         <option value="polkadot">Polkadot (DOT)</option>
+                         <option value="avalanche-2">Avalanche (AVAX)</option>
+                         <option value="monero">Monero (XMR)</option>
+                         <option value="shiba-inu">Shiba Inu (SHIB)</option>
+                     </datalist>
                 </div>
                 <div class="input-wrapper hidden" data-type="quote">
                      <label for="quote-select" class="slider-label">Quote:</label>
@@ -1252,10 +1308,10 @@
         
         // Input elements (remained the same, just accessed via sidebar scope now)
         const zipInput = document.getElementById('zip-input');
-        const stockSelect = document.getElementById('stock-select');
+        const stockInput = document.getElementById('stock-input');
         const newsTopicSelect = document.getElementById('news-topic-select');
         const redditInput = document.getElementById('reddit-input');
-        const cryptoSelect = document.getElementById('crypto-select');
+        const cryptoInput = document.getElementById('crypto-input');
         const quoteSelect = document.getElementById('quote-select');
         const timezoneSelect = document.getElementById('timezone-select');
         const countdownName = document.getElementById('countdown-name');
@@ -1506,6 +1562,13 @@
         // timing out on 100% of requests. A relay we control is the only
         // durable fix. No API key is involved -- none of the upstream APIs
         // need one, so there's nothing secret in that URL.
+        // Defaults for a first visit. Both are overridable and, once a
+        // choice is stored, that choice wins -- including "no background",
+        // which is stored explicitly so clearing it doesn't silently come
+        // back on the next load.
+        const DEFAULT_THEME = 'bonappel';
+        const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
+
         const DEFAULT_PROXY_URL = 'https://weatherbubb-proxy.ethamdavis89.workers.dev';
 
         // The relay is overridable from the sidebar, and that override is
@@ -1795,6 +1858,14 @@
                 throw new Error("Could not fetch crypto data.");
             }
             const data = await response.json();
+            // An unknown coin is a 200 with an empty object, not an error
+            // status -- so without this check a typo yields undefined and
+            // the bubble renders blank instead of saying what went wrong.
+            // Much more reachable now that any coin name can be typed.
+            if (!data || !data[coinId]) {
+                debugLog('warn', `[Crypto:${coinId}] unknown coin (empty result)`);
+                throw new Error(`No coin called "${coinId}". CoinGecko uses full names, e.g. "bitcoin" not "BTC".`);
+            }
             debugLog('info', `[Crypto:${coinId}] OK (${Math.round(performance.now() - startedAt)}ms)`);
             return data[coinId];
         }
@@ -2011,24 +2082,52 @@
             gustLineEl.style.transform = `rotate(${angle}deg)`;
         }
 
+        // Acceleration, not force: applyForce divides by mass, so a raw force
+        // shoves a small bubble across the screen and barely moves a large
+        // one. Multiplying back by mass makes every bubble respond to a
+        // gust the same way, regardless of size.
+        const GUST_MIN_ACCEL = 0.0015;   // a deliberate short flick
+        const GUST_MAX_ACCEL = 0.022;    // a full-screen sweep
+        const GUST_MIN_DIST = 20;        // below this it's a tap, not a gust
+
         function applyWindGust(start, end) {
             const dx = end.x - start.x;
             const dy = end.y - start.y;
             const dist = Math.hypot(dx, dy);
-            if (dist < 20) return; // Ignore taps / tiny drags
+            if (dist < GUST_MIN_DIST) return;
 
             const dirX = dx / dist;
             const dirY = dy / dist;
-            const strength = Math.min(dist, 400) * 0.0006; // Clamp so huge drags don't launch bubbles offscreen
+
+            // The old version clamped at a fixed 400px, which on a desktop
+            // screen is a short drag -- so nearly every gust saturated and
+            // they all felt identical however far you dragged. Measuring
+            // against the viewport's own diagonal keeps the full range of
+            // drag lengths meaningful on any screen size.
+            const viewportSpan = Math.hypot(window.innerWidth, window.innerHeight);
+            const usableSpan = Math.max(1, viewportSpan * 0.6 - GUST_MIN_DIST);
+            const t = Math.min(Math.max(dist - GUST_MIN_DIST, 0) / usableSpan, 1);
+
+            // Squared so the low end stays gentle and the difference between
+            // a flick and a sweep is obvious, rather than everything landing
+            // in a narrow band around the middle.
+            const accel = GUST_MIN_ACCEL + (GUST_MAX_ACCEL - GUST_MIN_ACCEL) * (t * t);
 
             let affected = 0;
             Composite.allBodies(matterWorld).forEach(body => {
                 if (!bubbleMap.has(body.id)) return; // Skip walls
                 if (body.isStatic) return; // Locked/sleeping bubbles are unaffected
-                Body.applyForce(body, body.position, { x: dirX * strength, y: dirY * strength });
+                Body.applyForce(body, body.position, {
+                    x: dirX * accel * body.mass,
+                    y: dirY * accel * body.mass,
+                });
                 affected++;
             });
-            if (affected > 0) showNotification("Gust!", "info");
+            if (affected > 0) {
+                const pct = Math.round(t * 100);
+                debugLog('info', `[Gust] ${Math.round(dist)}px drag -> ${pct}% strength (accel ${accel.toFixed(4)}), ${affected} bubbles`);
+                showNotification(pct > 66 ? "Big gust!" : pct > 25 ? "Gust!" : "Breeze", "info");
+            }
         }
 
         function initWindGust() {
@@ -2084,6 +2183,58 @@
 
         // --- Bubble Creation ---
 
+        // Drives the custom grip. Sets width/height on the bubble and lets
+        // the existing ResizeObserver do the rest (physics body rescale and
+        // persisting the new size), so this stays a pure input handler.
+        function attachResizeHandle(bubble) {
+            const handle = bubble.querySelector('.bubble-resize-handle');
+            if (!handle) return;
+
+            handle.addEventListener('pointerdown', (e) => {
+                if (isMobileViewport) return;
+                // Matter.js listens on #main-content and would otherwise
+                // start dragging the body out from under the resize.
+                e.preventDefault();
+                e.stopPropagation();
+
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startW = bubble.offsetWidth;
+                const startH = bubble.offsetHeight;
+                const scale = (typeof currentScale === 'number' && currentScale > 0) ? currentScale : 1;
+                handle.classList.add('dragging');
+                handle.setPointerCapture(e.pointerId);
+
+                // The transition on width/height makes a drag feel like it's
+                // lagging behind the cursor, so suspend it for the duration.
+                const priorTransition = bubble.style.transition;
+                bubble.style.transition = 'none';
+
+                const onMove = (ev) => {
+                    // Divide by zoom so the bubble tracks the cursor 1:1
+                    // rather than drifting at anything but 100%.
+                    const w = startW + (ev.clientX - startX) / scale;
+                    const h = startH + (ev.clientY - startY) / scale;
+                    bubble.style.width = Math.max(BUBBLE_MIN_WIDTH * scale, w) + 'px';
+                    bubble.style.height = Math.max(BUBBLE_MIN_HEIGHT * scale, h) + 'px';
+                };
+                const onUp = () => {
+                    handle.removeEventListener('pointermove', onMove);
+                    handle.removeEventListener('pointerup', onUp);
+                    handle.removeEventListener('pointercancel', onUp);
+                    handle.classList.remove('dragging');
+                    bubble.style.transition = priorTransition;
+                    debugLog('info', `[Resize] handle drag finished at ${Math.round(bubble.offsetWidth)}x${Math.round(bubble.offsetHeight)}`);
+                };
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onUp);
+                handle.addEventListener('pointercancel', onUp);
+            });
+
+            // Keep a double-click on the grip from reaching the bubble.
+            handle.addEventListener('dblclick', (e) => e.stopPropagation());
+        }
+
         async function buildBubbleShell(data) {
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
@@ -2119,8 +2270,10 @@
                 </div>
                 <div class="bubble-content-wrapper">
                     <!-- Content goes here --></div>
+                <div class="bubble-resize-handle" title="Drag to resize"></div>
             `;
             bubbleContainer.appendChild(bubble);
+            attachResizeHandle(bubble);
 
             return {
                 bubble,
@@ -2755,7 +2908,19 @@
                         zipInput.value = '';
                         break;
                     case 'stock':
-                        data.ticker = stockSelect.value;
+                        // Any symbol the upstream knows, not a fixed list.
+                        // Uppercased because that's the convention Yahoo
+                        // expects, and symbols legitimately contain dots and
+                        // hyphens (BRK.B, RDS-A), so those stay.
+                        {
+                            const ticker = stockInput.value.trim().toUpperCase();
+                            if (!ticker) throw new Error("Enter a ticker symbol.");
+                            if (!/^[A-Z0-9.\-^=]{1,12}$/.test(ticker)) {
+                                throw new Error(`"${ticker}" isn't a valid ticker symbol.`);
+                            }
+                            data.ticker = ticker;
+                            stockInput.value = '';
+                        }
                         break;
                     case 'news':
                         data.topic = newsTopicSelect.value;
@@ -2766,7 +2931,18 @@
                         redditInput.value = '';
                         break;
                     case 'crypto':
-                        data.coinId = cryptoSelect.value;
+                        // CoinGecko identifies coins by a lowercase slug
+                        // ("avalanche-2"), not by ticker, so normalise to
+                        // that rather than rejecting what people type.
+                        {
+                            const coinId = cryptoInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+                            if (!coinId) throw new Error("Enter a coin name.");
+                            if (!/^[a-z0-9-]{1,40}$/.test(coinId)) {
+                                throw new Error(`"${cryptoInput.value.trim()}" isn't a valid coin name.`);
+                            }
+                            data.coinId = coinId;
+                            cryptoInput.value = '';
+                        }
                         break;
                     case 'quote':
                         data.tag = quoteSelect.value;
@@ -3107,11 +3283,17 @@
              clearAllBubbles(false);
 
             // Load background first
-            const savedBg = localStorage.getItem('dashboardBackground');
-            if (savedBg) {
+            // 'none' is a real stored value, not an absent one: clearing the
+            // background has to survive a reload rather than being treated
+            // as "never chose" and re-defaulted.
+            const storedBg = localStorage.getItem('dashboardBackground');
+            const savedBg = storedBg === null ? DEFAULT_BACKGROUND : storedBg;
+            if (savedBg && savedBg !== 'none') {
                 document.body.style.backgroundImage = `url(${savedBg})`;
-                customBgInput.value = savedBg; // Set input value as well
-                customBgSelect.value = ""; // Clear preset selection if custom URL exists
+                customBgSelect.value = savedBg;          // highlight it if it's a preset
+                customBgInput.value = customBgSelect.value === savedBg ? '' : savedBg;
+            } else {
+                document.body.style.backgroundImage = 'none';
             }
 
             let savedBubbles = overrideBubbles || JSON.parse(localStorage.getItem('dashboardBubbles') || '[]');
@@ -3621,7 +3803,9 @@
                 showNotification("Background Set!", "success");
              } else {
                  document.body.style.backgroundImage = 'none';
-                 localStorage.removeItem('dashboardBackground');
+                 // Stored, not removed -- an absent key means "first visit"
+                 // and would re-apply the default on the next load.
+                 localStorage.setItem('dashboardBackground', 'none');
                  showNotification("Background Cleared", "info");
              }
          }
@@ -3752,7 +3936,7 @@
             if (localStorage.getItem('debugMode') === '1') showDebugPanel();
 
             // Restore saved theme + float speed before physics/bubbles spin up
-            const savedTheme = localStorage.getItem('dashboardTheme') || 'classic';
+            const savedTheme = localStorage.getItem('dashboardTheme') || DEFAULT_THEME;
             themeSelect.value = savedTheme;
             document.body.classList.toggle('theme-bonappel', savedTheme === 'bonappel');
 
