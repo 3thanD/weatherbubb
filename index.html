@@ -977,6 +977,44 @@
         }
         .group-row .split-btn:hover { opacity: 1; }
 
+        .links-view { display: flex; flex-direction: column; height: 100%; padding: 0.5rem; }
+        .links-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+        .links-empty { font-size: 0.75rem; opacity: 0.6; padding: 0.4rem 0.2rem; }
+        .link-item {
+            display: flex; align-items: center; gap: 0.45rem;
+            padding: 0.22rem 0.2rem; border-radius: 0.35rem; cursor: grab;
+        }
+        .link-item:hover { background: rgba(255,255,255,0.08); }
+        .link-item.dragging { opacity: 0.45; }
+        .link-icon { width: 16px; height: 16px; flex-shrink: 0; border-radius: 3px; }
+        .link-fallback {
+            width: 16px; height: 16px; flex-shrink: 0; border-radius: 3px;
+            background: var(--wb-accent-solid); color: #000;
+            font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center;
+        }
+        .link-item a {
+            flex: 1; font-size: 0.8rem; color: inherit; text-decoration: none;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .link-item a:hover { text-decoration: underline; }
+        .link-delete-btn {
+            background: none; border: 0; color: inherit; cursor: pointer;
+            opacity: 0; font-size: 1rem; line-height: 1; padding: 0 2px;
+        }
+        .link-item:hover .link-delete-btn { opacity: 0.55; }
+        .link-delete-btn:hover { opacity: 1; }
+        .links-add { display: flex; gap: 0.25rem; margin-top: 0.35rem; }
+        .links-add input {
+            min-width: 0; flex: 1; font-size: 0.72rem; padding: 0.25rem 0.35rem;
+            background: rgba(0,0,0,0.3); color: inherit;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 0.3rem;
+        }
+        .links-add .link-name-input { flex: 0 1 38%; }
+        .link-add-btn {
+            flex-shrink: 0; width: 26px; background: var(--wb-accent-solid);
+            color: #000; border: 0; border-radius: 0.3rem; cursor: pointer; font-weight: 700;
+        }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1098,6 +1136,7 @@
                 <option value="news">News Headlines</option>
                 <option value="reddit">Reddit Feed</option>
                 <option value="crypto">Crypto Ticker</option>
+                <option value="links">Quick Links</option>
                 <option value="youtube">YouTube Player</option>
                 <option value="quote">Quote of the Day</option>
                 <option value="digitalClock">Digital Clock</option>
@@ -1208,6 +1247,12 @@
                  <div class="input-wrapper hidden" data-type="image">
                      <label for="image-url" class="slider-label">Image URL:</label>
                     <input type="text" id="image-url" placeholder="URL..." class="bubble-input">
+                </div>
+                 <div class="input-wrapper hidden" data-type="links">
+                     <label for="links-title" class="slider-label">List Title:</label>
+                     <input type="text" id="links-title" placeholder="(Optional)" class="bubble-input">
+                     <p class="field-hint">Add your links inside the bubble once it's
+                        created. Only http and https links are accepted.</p>
                 </div>
                  <div class="input-wrapper hidden" data-type="todo">
                      <label for="todo-title" class="slider-label">List Title:</label>
@@ -1475,6 +1520,7 @@
         const stockInput = document.getElementById('stock-input');
         const newsTopicSelect = document.getElementById('news-topic-select');
         const youtubeInput = document.getElementById('youtube-input');
+        const linksTitleInput = document.getElementById('links-title');
         const redditInput = document.getElementById('reddit-input');
         const cryptoInput = document.getElementById('crypto-input');
         const quoteSelect = document.getElementById('quote-select');
@@ -1679,6 +1725,20 @@
         }
 
         // --- Notification Function ---
+        // Bubble contents are user-typed and go into innerHTML. That was
+        // survivable while the data never left the browser, but sync codes
+        // are meant to be pasted between machines and people, so text from
+        // one person's dashboard can now end up rendered in another's.
+        // Escape it.
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function showNotification(message, type = 'info') {
             if (notificationTimeout) clearTimeout(notificationTimeout);
             notificationMessage.textContent = message;
@@ -1737,7 +1797,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0403';
+        const BUILD_ID = '2026-09-21-0418';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2417,7 +2477,7 @@
             let defaultHeight = BUBBLE_DEFAULT_HEIGHT;
             if (data.type === 'news' || data.type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
             if (data.type === 'youtube') defaultHeight = Math.round(BUBBLE_DEFAULT_WIDTH * 9 / 16) + 56;
-            if (data.type === 'todo') defaultHeight = BUBBLE_TODO_HEIGHT;
+            if (data.type === 'todo' || data.type === 'links') defaultHeight = BUBBLE_TODO_HEIGHT;
 
             bubble.style.width = `${data.width || BUBBLE_DEFAULT_WIDTH}px`;
             bubble.style.height = `${data.height || defaultHeight}px`;
@@ -2949,10 +3009,151 @@
         }
         
         // NEW: ToDo List Bubble
+        // User-typed text becomes a clickable link, so the scheme is checked
+        // rather than assumed. Without this, "javascript:..." pasted into
+        // the field would run as script on click -- and a link list is
+        // exactly the sort of thing whose contents get shared via a sync
+        // code, so the check also protects whoever pastes that code.
+        function normalizeLinkUrl(raw) {
+            const trimmed = (raw || '').trim();
+            if (!trimmed) return null;
+            // Bare "example.com" is what people actually type.
+            const candidate = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) ? trimmed : `https://${trimmed}`;
+            let url;
+            try { url = new URL(candidate); } catch { return null; }
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+            // The scheme check alone lets plain prose through: prefixing
+            // https:// to "not a url at all" parses happily, with "not" as
+            // the hostname and the rest as a path. Require something that
+            // actually looks like a host, so a typo is rejected at the point
+            // of entry rather than saved as a dead link.
+            const host = url.hostname;
+            if (!host || !/^[a-z0-9.-]+$/i.test(host)) return null;
+            if (!host.includes('.') && host !== 'localhost') return null;
+            if (host.startsWith('.') || host.endsWith('.') || host.includes('..')) return null;
+            return url.href;
+        }
+
+        function faviconFor(href) {
+            // Taken from the site's own origin rather than a favicon service,
+            // so opening the dashboard doesn't announce your whole link list
+            // to a third party. Falls back to a letter badge on error.
+            try { return new URL(href).origin + '/favicon.ico'; } catch { return ''; }
+        }
+
+        function buildLinksBubble(bubble, contentWrapper, data) {
+            if (!Array.isArray(data.links)) data.links = [];
+
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view links-view">
+                    <h3 class="text-lg font-bold mb-1">${escapeHtml(data.title || 'Quick Links')}</h3>
+                    <ul class="links-list"></ul>
+                    <div class="links-add">
+                        <input type="text" class="link-url-input" placeholder="Paste a link..." autocapitalize="off" autocorrect="off" spellcheck="false">
+                        <input type="text" class="link-name-input" placeholder="Name (optional)">
+                        <button class="link-add-btn" title="Add this link">+</button>
+                    </div>
+                </div>`;
+
+            const listEl = contentWrapper.querySelector('.links-list');
+            const urlInput = contentWrapper.querySelector('.link-url-input');
+            const nameInput = contentWrapper.querySelector('.link-name-input');
+
+            const persist = () => {
+                bubble.dataset.bubbleData = JSON.stringify(data);
+                saveBubblesState();
+            };
+
+            function render() {
+                listEl.innerHTML = '';
+                if (!data.links.length) {
+                    listEl.innerHTML = '<li class="links-empty">No links yet. Paste one below.</li>';
+                    return;
+                }
+                data.links.forEach((link, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'link-item';
+                    li.draggable = true;
+                    li.dataset.index = String(index);
+                    // rel=noopener stops the opened page reaching back through
+                    // window.opener; noreferrer keeps the dashboard's URL out
+                    // of the target's referer logs.
+                    li.innerHTML = `
+                        <img class="link-icon" src="${escapeHtml(faviconFor(link.url))}" alt="" loading="lazy">
+                        <span class="link-fallback" hidden>${escapeHtml((link.name || link.url).replace(/^https?:\/\//, '').charAt(0).toUpperCase())}</span>
+                        <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.url)}">${escapeHtml(link.name || link.url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</a>
+                        <button class="link-delete-btn" data-index="${index}" title="Remove">&times;</button>`;
+                    const img = li.querySelector('.link-icon');
+                    img.addEventListener('error', () => {
+                        img.hidden = true;
+                        li.querySelector('.link-fallback').hidden = false;
+                    });
+                    listEl.appendChild(li);
+                });
+            }
+
+            function addLink() {
+                const href = normalizeLinkUrl(urlInput.value);
+                if (!href) {
+                    showNotification("That isn't a usable web link. Only http and https work here.", 'error');
+                    return;
+                }
+                data.links.push({ url: href, name: nameInput.value.trim() });
+                urlInput.value = '';
+                nameInput.value = '';
+                render();
+                persist();
+            }
+
+            contentWrapper.querySelector('.link-add-btn').addEventListener('click', addLink);
+            [urlInput, nameInput].forEach(el => el.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); addLink(); }
+            }));
+
+            listEl.addEventListener('click', (e) => {
+                const del = e.target.closest('.link-delete-btn');
+                if (!del) return;
+                e.preventDefault();
+                data.links.splice(parseInt(del.dataset.index, 10), 1);
+                render();
+                persist();
+            });
+
+            // Reorder by dragging a row, so a frequently used link can be
+            // moved to the top without deleting and re-adding it.
+            let dragIndex = null;
+            listEl.addEventListener('dragstart', (e) => {
+                const li = e.target.closest('.link-item');
+                if (!li) return;
+                dragIndex = parseInt(li.dataset.index, 10);
+                e.dataTransfer.effectAllowed = 'move';
+                li.classList.add('dragging');
+            });
+            listEl.addEventListener('dragover', (e) => { e.preventDefault(); });
+            listEl.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const li = e.target.closest('.link-item');
+                if (!li || dragIndex === null) return;
+                const to = parseInt(li.dataset.index, 10);
+                if (to === dragIndex) return;
+                const [moved] = data.links.splice(dragIndex, 1);
+                data.links.splice(to, 0, moved);
+                dragIndex = null;
+                render();
+                persist();
+            });
+            listEl.addEventListener('dragend', () => {
+                listEl.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+                dragIndex = null;
+            });
+
+            render();
+        }
+
         function buildTodoBubble(contentWrapper, data) {
             contentWrapper.innerHTML = `
                 <div class="bubble-content-view todo-list-view">
-                    <h3 class="text-lg font-bold mb-1">${data.title || 'To-Do List'}</h3>
+                    <h3 class="text-lg font-bold mb-1">${escapeHtml(data.title || 'To-Do List')}</h3>
                     <div class="todo-input-group">
                         <input type="text" class="todo-input" placeholder="Add new item...">
                         <button class="todo-add-btn">+</button>
@@ -2973,7 +3174,7 @@
                     li.className = 'todo-item';
                     li.innerHTML = `
                         <input type="checkbox" data-index="${index}" ${item.done ? 'checked' : ''}>
-                        <span>${item.text}</span>
+                        <span>${escapeHtml(item.text)}</span>
                         <button class="todo-delete-btn" data-index="${index}">&times;</button>
                     `;
                     listEl.appendChild(li);
@@ -3228,6 +3429,11 @@
                         data.url = imageUrl.value;
                         imageUrl.value = '';
                         break;
+                    case 'links':
+                        data.title = linksTitleInput.value;
+                        data.links = [];
+                        linksTitleInput.value = '';
+                        break;
                     case 'todo': // NEW
                         data.title = todoTitleInput.value;
                         todoTitleInput.value = '';
@@ -3274,6 +3480,7 @@
                 case 'youtube': buildYouTubeBubble(contentWrapper, data); break;
                 case 'calculator': buildCalculatorBubble(contentWrapper); break;
                 case 'image': buildImageBubble(contentWrapper, data); break;
+                case 'links': buildLinksBubble(bubble, contentWrapper, data); break;
                 case 'todo': buildTodoBubble(contentWrapper, data); break;
                 case 'worldClock': buildWorldClockBubble(bubble, contentWrapper, data); break;
                 case 'joke': buildJokeBubble(bubble, contentWrapper, data); break;
@@ -3550,7 +3757,7 @@
              // Determine default height based on type
              let defaultHeight = BUBBLE_DEFAULT_HEIGHT;
              if (type === 'news' || type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
-             if (type === 'todo') defaultHeight = BUBBLE_TODO_HEIGHT;
+             if (type === 'todo' || type === 'links') defaultHeight = BUBBLE_TODO_HEIGHT;
              // 16:9 plus the header, so a video doesn't open letterboxed.
              // This is the block that actually decides the size -- it writes
              // data.height, which then wins over buildBubbleShell's own
