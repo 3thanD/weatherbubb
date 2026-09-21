@@ -1,0 +1,29 @@
+# Cloudflare Workers Builds configuration.
+#
+# This file only matters when the Worker is connected to this GitHub
+# repository. That connection changes how deployment works in a way worth
+# stating plainly, because nothing in the dashboard says it: the repo
+# becomes the only source of truth, and the in-dashboard code editor is
+# DISABLED. It shows no files, and "Create File" hangs rather than
+# failing, because writes are rejected. A Worker can sit in that state
+# indefinitely -- route green, URL correct, no script deployed -- which
+# from the outside looks exactly like a broken or misconfigured relay.
+#
+# With this file present, a push to the default branch builds and deploys
+# the relay. No build step is needed: the worker is a single dependency
+# free ES module, so Cloudflare just runs `wrangler deploy`.
+#
+# Kept at the repo root deliberately, so it works with the default build
+# root directory and needs no dashboard configuration. `main` reaches
+# into worker/ rather than the file moving up here.
+#
+# There are no secrets in this file, and the worker needs none -- every
+# upstream it can reach is a keyless public API.
+
+name = "weatherbubb-proxy"
+main = "worker/weatherbubb-proxy.js"
+compatibility_date = "2024-11-01"
+
+# Keep serving on weatherbubb-proxy.<subdomain>.workers.dev, which is the
+# URL the app is configured to use.
+workers_dev = true

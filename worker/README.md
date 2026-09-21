@@ -33,6 +33,40 @@ Free tier covers 100,000 requests/day. With the 60-second edge cache in
 7. Send that URL over and it gets wired into the app (one line —
    `CUSTOM_PROXY_URL` at the top of the script in `index.html`).
 
+## If the Worker is connected to GitHub
+
+Connecting a Worker to a GitHub repository changes how it deploys, and
+the dashboard doesn't say so: **the repo becomes the only source of
+truth and the in-dashboard code editor is disabled.** It shows no files,
+and "Create File" hangs rather than reporting an error, because writes
+are rejected rather than refused.
+
+A Worker can stay in that state indefinitely -- Production route green,
+`workers.dev` URL correct, no script deployed -- which from outside is
+indistinguishable from a broken relay.
+
+`wrangler.toml` at the repo root is what makes the connection work:
+
+    name = "weatherbubb-proxy"
+    main = "worker/weatherbubb-proxy.js"
+    compatibility_date = "2024-11-01"
+    workers_dev = true
+
+With it present, a push to the default branch builds and deploys the
+relay. No build command is needed -- the worker is a single
+dependency-free ES module, so Cloudflare just runs `wrangler deploy`.
+It's at the repo root so the default build root directory works with no
+dashboard configuration.
+
+Check **Deployments** after a push. If no build ran, the Worker is
+connected to a different repository than this one; either point it here
+or add the same `wrangler.toml` to that repo, with `main` adjusted to
+wherever `weatherbubb-proxy.js` lives in it.
+
+To go back to editing in the dashboard instead, disconnect the Git
+integration in the Worker's **Settings** -- editing and the GitHub
+connection are mutually exclusive.
+
 ## A Worker with no source file (this actually happened)
 
 A Worker can exist, show a green Production route and a correct
