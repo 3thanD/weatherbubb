@@ -1542,7 +1542,18 @@
                 const startedAt = performance.now();
                 try {
                     const response = await fetchWithTimeout(proxy.build(targetUrl));
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    if (!response.ok) {
+                        // Include the body. Our worker explains every refusal
+                        // there ("Origin not allowed: https://...", "Target
+                        // host not allowed: ..."), and a status code alone
+                        // sends you guessing at which rule you tripped.
+                        let detail = '';
+                        try {
+                            const errText = (await response.clone().text()).trim();
+                            if (errText) detail = ` -- ${errText.slice(0, 200)}`;
+                        } catch { /* body unreadable; the status still tells us something */ }
+                        throw new Error(`HTTP ${response.status}${detail}`);
+                    }
                     const text = await response.text();
                     debugLog('info', `[${label}] ${proxy.name}: OK (${Math.round(performance.now() - startedAt)}ms)`);
                     // allorigins wraps the target response as {contents: "..."};
@@ -3548,6 +3559,9 @@
         
         window.addEventListener('load', () => {
             debugLog('info', `WeatherBubb loaded -- ${window.innerWidth}x${window.innerHeight}, UA: ${navigator.userAgent}`);
+            // The relay accepts a fixed set of origins, so this line is the
+            // difference between diagnosing a rejection and guessing at it.
+            debugLog('info', `[Env] origin: ${window.location.origin} | page: ${window.location.pathname} | relay: ${CUSTOM_PROXY_URL || '(none configured)'}`);
             if (localStorage.getItem('debugMode') === '1') showDebugPanel();
 
             // Restore saved theme + float speed before physics/bubbles spin up

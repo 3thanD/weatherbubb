@@ -48,7 +48,7 @@ const MAX_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 function corsHeaders(origin) {
   return {
-    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
@@ -56,12 +56,25 @@ function corsHeaders(origin) {
   };
 }
 
+// Every response carries CORS headers -- including refusals.
+//
+// Refusals used to be sent without them, on the reasoning that a browser
+// couldn't read a rejection anyway. That backfired: a refusal with no CORS
+// headers is indistinguishable in the browser from the worker being down,
+// a DNS failure, or a firewall drop. They all surface as the same bare
+// "Failed to fetch" with no status and no message, which made a simple
+// origin mismatch cost a full debugging round trip.
+//
+// Reflecting the caller's origin on a refusal gives away nothing: the
+// response is a rejection, it carries no upstream data, it needs no
+// credentials, and the request was refused regardless. The target
+// allowlist below is what actually contains the blast radius.
 function deny(status, message, origin) {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...(origin ? corsHeaders(origin) : {}),
+      ...corsHeaders(origin),
     },
   });
 }
@@ -70,6 +83,24 @@ export default {
   async fetch(request) {
     const origin = request.headers.get('Origin') || '';
     const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : null;
+
+    // Health check, reachable from a plain browser tab (which sends no
+    // Origin header). Confirms *this* code is what's deployed and reports
+    // the origin it sees, so "is the worker even running my script?" is a
+    // question you answer by opening a URL rather than by deploying again.
+    if (new URL(request.url).pathname === '/health') {
+      return new Response(JSON.stringify({
+        ok: true,
+        worker: 'weatherbubb-proxy',
+        originSeen: origin || '(none sent)',
+        originAllowed: Boolean(allowedOrigin),
+        allowedOrigins: [...ALLOWED_ORIGINS],
+        allowedTargets: [...ALLOWED_TARGET_HOSTS],
+      }, null, 2), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
 
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -83,8 +114,9 @@ export default {
     }
 
     if (!allowedOrigin) {
-      // No CORS headers on this response, so a browser couldn't read it anyway.
-      return deny(403, 'Origin not allowed.', null);
+      // Name the origin actually seen. Without it, diagnosing this from a
+      // client debug log means guessing at what the browser sent.
+      return deny(403, `Origin not allowed: ${origin || '(none sent)'}`, origin);
     }
 
     const rawTarget = new URL(request.url).searchParams.get('url');
