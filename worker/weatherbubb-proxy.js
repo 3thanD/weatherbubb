@@ -38,6 +38,9 @@ const ALLOWED_TARGET_HOSTS = new Set([
   // browser can't read them directly however well-formed the request is.
   'www.reddit.com',
   'old.reddit.com',
+  // Scoreboards. Tried directly first; this is only the fallback for
+  // when ESPN's CORS headers aren't present.
+  'site.api.espn.com',
 ]);
 
 const ALLOWED_ORIGINS = new Set([

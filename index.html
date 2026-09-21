@@ -1059,6 +1059,41 @@
         }
         .search-recent:hover { background: rgba(255,255,255,0.2); }
 
+        .sports-view, .otd-view, .currency-view, .commute-view { display: flex; flex-direction: column; height: 100%; padding: 0.5rem; gap: 0.3rem; }
+        .sports-head { display: flex; align-items: center; justify-content: space-between; }
+        .sports-refresh-btn { background: none; border: 0; color: inherit; cursor: pointer; font-size: 1rem; opacity: 0.6; }
+        .sports-refresh-btn:hover { opacity: 1; }
+        .score-list, .rate-list, .otd-list { flex: 1; overflow-y: auto; min-height: 0; }
+        .score-row {
+            display: grid; grid-template-columns: 1fr auto 0.7rem 1fr auto; gap: 0.3rem;
+            align-items: baseline; font-size: 0.74rem; padding: 0.22rem 0.1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .score-row.live { background: rgba(255,255,255,0.06); }
+        .score-team { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .score-team.won { font-weight: 700; }
+        .score-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .score-at { opacity: 0.4; text-align: center; }
+        .score-status { grid-column: 1 / -1; font-size: 0.6rem; opacity: 0.55; }
+        .rate-row { display: flex; justify-content: space-between; font-size: 0.82rem; padding: 0.2rem 0.1rem; }
+        .rate-code { font-weight: 700; opacity: 0.85; }
+        .rate-value { font-variant-numeric: tabular-nums; }
+        .rate-date { font-size: 0.6rem; opacity: 0.5; }
+        .otd-row { display: flex; gap: 0.4rem; padding: 0.25rem 0.1rem; font-size: 0.73rem; color: inherit; text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        a.otd-row:hover { background: rgba(255,255,255,0.07); }
+        .otd-year { flex-shrink: 0; font-weight: 700; color: var(--wb-accent-solid); min-width: 2.6em; }
+        .otd-text { flex: 1; line-height: 1.3; }
+        .commute-pair { display: flex; flex-direction: column; gap: 0.2rem; }
+        .commute-leg { font-size: 0.78rem; }
+        .commute-label { display: inline-block; min-width: 3.2em; font-size: 0.6rem; opacity: 0.55; text-transform: uppercase; }
+        .commute-actions { display: flex; flex-direction: column; gap: 0.3rem; margin-top: auto; }
+        .commute-btn {
+            display: block; text-align: center; font-size: 0.74rem; padding: 0.3rem;
+            background: rgba(255,255,255,0.1); border-radius: 0.35rem;
+            color: inherit; text-decoration: none;
+        }
+        .commute-btn:hover { background: rgba(255,255,255,0.2); }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1181,6 +1216,10 @@
                 <option value="reddit">Reddit Feed</option>
                 <option value="crypto">Crypto Ticker</option>
                 <option value="search">Web Search</option>
+                <option value="sports">Sports Scores</option>
+                <option value="currency">Currency Rates</option>
+                <option value="onthisday">On This Day</option>
+                <option value="commute">Commute</option>
                 <option value="links">Quick Links</option>
                 <option value="youtube">YouTube Player</option>
                 <option value="quote">Quote of the Day</option>
@@ -1292,6 +1331,44 @@
                  <div class="input-wrapper hidden" data-type="image">
                      <label for="image-url" class="slider-label">Image URL:</label>
                     <input type="text" id="image-url" placeholder="URL..." class="bubble-input">
+                </div>
+                 <div class="input-wrapper hidden" data-type="sports">
+                     <label for="sports-league-select" class="slider-label">League:</label>
+                     <select id="sports-league-select" class="bubble-input">
+                         <option value="football/nfl">NFL</option>
+                         <option value="basketball/nba">NBA</option>
+                         <option value="baseball/mlb">MLB</option>
+                         <option value="hockey/nhl">NHL</option>
+                         <option value="football/college-football">College Football</option>
+                         <option value="basketball/mens-college-basketball">College Basketball</option>
+                         <option value="soccer/eng.1">Premier League</option>
+                         <option value="soccer/usa.1">MLS</option>
+                     </select>
+                     <p class="field-hint">Live and recent scores, refreshed every
+                        2 minutes while the tab is visible.</p>
+                </div>
+                 <div class="input-wrapper hidden" data-type="currency">
+                     <label for="currency-base" class="slider-label">Convert from:</label>
+                     <input type="text" id="currency-base" class="bubble-input" value="USD" maxlength="3"
+                            autocapitalize="characters" autocorrect="off" spellcheck="false">
+                     <label for="currency-targets" class="slider-label">Into:</label>
+                     <input type="text" id="currency-targets" class="bubble-input" value="EUR,GBP,JPY,CAD"
+                            autocapitalize="characters" autocorrect="off" spellcheck="false">
+                     <p class="field-hint">European Central Bank reference rates.
+                        Comma-separated currency codes.</p>
+                </div>
+                 <div class="input-wrapper hidden" data-type="onthisday">
+                     <p class="field-hint">Notable events from this date in history,
+                        from Wikipedia. Changes daily.</p>
+                </div>
+                 <div class="input-wrapper hidden" data-type="commute">
+                     <label for="commute-from" class="slider-label">From:</label>
+                     <input type="text" id="commute-from" class="bubble-input" placeholder="Home address">
+                     <label for="commute-to" class="slider-label">To:</label>
+                     <input type="text" id="commute-to" class="bubble-input" placeholder="Work address">
+                     <p class="field-hint">Opens live directions in Maps. Routing APIs
+                        all need paid keys, so this links out rather than
+                        showing a travel time here.</p>
                 </div>
                  <div class="input-wrapper hidden" data-type="search">
                      <label for="search-engine-select" class="slider-label">Search with:</label>
@@ -1581,6 +1658,11 @@
         const youtubeInput = document.getElementById('youtube-input');
         const linksTitleInput = document.getElementById('links-title');
         const searchEngineSelect = document.getElementById('search-engine-select');
+        const sportsLeagueSelect = document.getElementById('sports-league-select');
+        const currencyBaseInput = document.getElementById('currency-base');
+        const currencyTargetsInput = document.getElementById('currency-targets');
+        const commuteFromInput = document.getElementById('commute-from');
+        const commuteToInput = document.getElementById('commute-to');
         const redditInput = document.getElementById('reddit-input');
         const cryptoInput = document.getElementById('crypto-input');
         const quoteSelect = document.getElementById('quote-select');
@@ -1857,7 +1939,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0427';
+        const BUILD_ID = '2026-09-21-0429';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -3210,6 +3292,176 @@
             try { return new URL(href).origin + '/favicon.ico'; } catch { return ''; }
         }
 
+        // --- Sports scores (ESPN's public scoreboard feed, no key) ---
+        async function getSportsData(league) {
+            const path = String(league || 'football/nfl');
+            if (!/^[a-z-]+\/[a-z0-9.-]+$/.test(path)) throw new Error('Unknown league.');
+            const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`;
+            const raw = await fetchViaProxy(url, `Sports:${path}`);
+            let data;
+            try { data = JSON.parse(raw); } catch { throw new Error('Scoreboard data was unreadable.'); }
+            const events = Array.isArray(data.events) ? data.events : [];
+            if (!events.length) throw new Error('No games scheduled right now.');
+            return events.slice(0, 12).map(ev => {
+                const comp = (ev.competitions && ev.competitions[0]) || {};
+                const teams = (comp.competitors || []).map(c => ({
+                    name: (c.team && (c.team.shortDisplayName || c.team.abbreviation || c.team.displayName)) || '?',
+                    score: c.score != null ? String(c.score) : '',
+                    home: c.homeAway === 'home',
+                    winner: Boolean(c.winner),
+                }));
+                return {
+                    status: (ev.status && ev.status.type && (ev.status.type.shortDetail || ev.status.type.description)) || '',
+                    state: (ev.status && ev.status.type && ev.status.type.state) || '',
+                    teams,
+                };
+            });
+        }
+
+        const SPORTS_REFRESH_MS = 2 * 60 * 1000;
+
+        function renderSportsGames(listEl, games) {
+            listEl.innerHTML = (games || []).map(g => {
+                const away = g.teams.find(t => !t.home) || g.teams[0] || { name: '?', score: '' };
+                const home = g.teams.find(t => t.home) || g.teams[1] || { name: '?', score: '' };
+                const live = g.state === 'in' ? ' live' : '';
+                return `<div class="score-row${live}">
+                    <span class="score-team${away.winner ? ' won' : ''}">${escapeHtml(away.name)}</span>
+                    <span class="score-num">${escapeHtml(away.score)}</span>
+                    <span class="score-at">@</span>
+                    <span class="score-team${home.winner ? ' won' : ''}">${escapeHtml(home.name)}</span>
+                    <span class="score-num">${escapeHtml(home.score)}</span>
+                    <span class="score-status">${escapeHtml(g.status)}</span>
+                </div>`;
+            }).join('') || '<p class="text-xs text-gray-400">No games.</p>';
+        }
+
+        function buildSportsBubble(bubble, contentWrapper, games, data) {
+            const label = (sportsLeagueSelect.querySelector(`option[value="${data.league}"]`) || {}).textContent || data.league;
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view sports-view">
+                    <div class="sports-head">
+                        <h3 class="text-base font-bold">${escapeHtml(label)}</h3>
+                        <button class="sports-refresh-btn" title="Refresh now">&#x21bb;</button>
+                    </div>
+                    <div class="score-list"></div>
+                    <div class="sports-updated"></div>
+                </div>`;
+            const listEl = contentWrapper.querySelector('.score-list');
+            const stamp = contentWrapper.querySelector('.sports-updated');
+            renderSportsGames(listEl, games);
+            stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+            async function refresh(manual) {
+                if (!manual && document.visibilityState === 'hidden') return;
+                try {
+                    renderSportsGames(listEl, await getSportsData(data.league));
+                    stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                } catch (e) {
+                    debugLog('warn', `[Sports] refresh failed: ${e.message}`);
+                    stamp.textContent = `Update failed ${new Date().toLocaleTimeString()}`;
+                    if (manual) showNotification(e.message, 'error');
+                }
+            }
+            contentWrapper.querySelector('.sports-refresh-btn').addEventListener('click', () => refresh(true));
+            if (bubble.intervalId) clearInterval(bubble.intervalId);
+            bubble.intervalId = setInterval(() => refresh(false), SPORTS_REFRESH_MS);
+        }
+
+        // --- Currency (Frankfurter: ECB reference rates, CORS-open, no key) ---
+        async function getCurrencyData(base, targets) {
+            const from = String(base || 'USD').toUpperCase();
+            const to = (Array.isArray(targets) ? targets : []).join(',');
+            const startedAt = performance.now();
+            const url = `https://api.frankfurter.app/latest?base=${encodeURIComponent(from)}&symbols=${encodeURIComponent(to)}`;
+            const response = await fetchWithTimeout(url);
+            if (!response.ok) throw new Error(`Couldn't fetch rates (HTTP ${response.status}).`);
+            const data = await response.json();
+            if (!data || !data.rates) throw new Error('Rate data was unreadable.');
+            debugLog('info', `[Currency:${from}] OK (${Math.round(performance.now() - startedAt)}ms)`);
+            return data;
+        }
+
+        function buildCurrencyBubble(contentWrapper, rates, data) {
+            const rows = Object.entries((rates && rates.rates) || {})
+                .map(([code, value]) => `<div class="rate-row">
+                        <span class="rate-code">${escapeHtml(code)}</span>
+                        <span class="rate-value">${escapeHtml(Number(value).toFixed(4))}</span>
+                    </div>`).join('');
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view currency-view">
+                    <h3 class="text-base font-bold">1 ${escapeHtml(data.base || 'USD')} buys</h3>
+                    <div class="rate-list">${rows || '<p class="text-xs text-gray-400">No rates.</p>'}</div>
+                    <div class="rate-date">${escapeHtml(rates && rates.date ? `ECB rates for ${rates.date}` : '')}</div>
+                </div>`;
+        }
+
+        // --- On This Day (Wikipedia feed API, CORS-open, no key) ---
+        async function getOnThisDayData() {
+            const now = new Date();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const startedAt = performance.now();
+            const url = `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/${mm}/${dd}`;
+            const response = await fetchWithTimeout(url);
+            if (!response.ok) throw new Error(`Couldn't fetch today's events (HTTP ${response.status}).`);
+            const data = await response.json();
+            const events = Array.isArray(data.events) ? data.events : [];
+            if (!events.length) throw new Error('No events found for today.');
+            debugLog('info', `[OnThisDay] OK -- ${events.length} events (${Math.round(performance.now() - startedAt)}ms)`);
+            return events
+                .sort((a, b) => (b.year || 0) - (a.year || 0))
+                .slice(0, 15)
+                .map(e => ({
+                    year: e.year,
+                    text: e.text,
+                    url: (e.pages && e.pages[0] && e.pages[0].content_urls &&
+                          e.pages[0].content_urls.desktop && e.pages[0].content_urls.desktop.page) || '',
+                }));
+        }
+
+        function buildOnThisDayBubble(contentWrapper, events) {
+            const today = new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+            const rows = (events || []).map(e => {
+                const body = `<span class="otd-year">${escapeHtml(String(e.year || ''))}</span>
+                              <span class="otd-text">${escapeHtml(e.text || '')}</span>`;
+                return e.url
+                    ? `<a class="otd-row" href="${escapeHtml(e.url)}" target="_blank" rel="noopener noreferrer">${body}</a>`
+                    : `<div class="otd-row">${body}</div>`;
+            }).join('');
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view otd-view">
+                    <h3 class="text-base font-bold">On this day &mdash; ${escapeHtml(today)}</h3>
+                    <div class="otd-list">${rows || '<p class="text-xs text-gray-400">Nothing found.</p>'}</div>
+                </div>`;
+        }
+
+        // --- Commute ---
+        // Every routing API with live traffic (Google, Bing, Mapbox) requires
+        // a paid key, and a static page can't hold one safely. So rather than
+        // pretend, this keeps the addresses and opens real directions in the
+        // mapping app, which is the part that actually needs doing daily.
+        function buildCommuteBubble(contentWrapper, data) {
+            const from = data.from || '';
+            const to = data.to || '';
+            const gmaps = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&travelmode=driving`;
+            const gmapsBack = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(to)}&destination=${encodeURIComponent(from)}&travelmode=driving`;
+            const transit = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&travelmode=transit`;
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view commute-view">
+                    <h3 class="text-base font-bold">Commute</h3>
+                    <div class="commute-pair">
+                        <div class="commute-leg"><span class="commute-label">From</span>${escapeHtml(from)}</div>
+                        <div class="commute-leg"><span class="commute-label">To</span>${escapeHtml(to)}</div>
+                    </div>
+                    <div class="commute-actions">
+                        <a href="${escapeHtml(gmaps)}" target="_blank" rel="noopener noreferrer" class="commute-btn">Drive there &rarr;</a>
+                        <a href="${escapeHtml(gmapsBack)}" target="_blank" rel="noopener noreferrer" class="commute-btn">&larr; Drive back</a>
+                        <a href="${escapeHtml(transit)}" target="_blank" rel="noopener noreferrer" class="commute-btn">Transit</a>
+                    </div>
+                </div>`;
+        }
+
         // Every major homepage leads with a search box; this was the single
         // biggest thing WeatherBubb didn't have. Deliberately keyless: each
         // engine is just a URL with the query appended, so there's no API,
@@ -3687,6 +3939,34 @@
                     case 'search':
                         data.engine = searchEngineSelect.value;
                         break;
+                    case 'sports':
+                        data.league = sportsLeagueSelect.value;
+                        break;
+                    case 'currency':
+                        {
+                            const base = currencyBaseInput.value.trim().toUpperCase();
+                            const targets = currencyTargetsInput.value.toUpperCase()
+                                .split(',').map(t => t.trim()).filter(Boolean);
+                            if (!/^[A-Z]{3}$/.test(base)) throw new Error('Base must be a 3-letter currency code, e.g. USD.');
+                            if (!targets.length || !targets.every(t => /^[A-Z]{3}$/.test(t))) {
+                                throw new Error('Target currencies must be 3-letter codes, e.g. EUR,GBP.');
+                            }
+                            data.base = base;
+                            data.targets = targets.filter(t => t !== base).slice(0, 8);
+                            if (!data.targets.length) throw new Error('Pick at least one currency other than the base.');
+                        }
+                        break;
+                    case 'onthisday':
+                        break;
+                    case 'commute':
+                        if (!commuteFromInput.value.trim() || !commuteToInput.value.trim()) {
+                            throw new Error('Enter both a start and a destination.');
+                        }
+                        data.from = commuteFromInput.value.trim();
+                        data.to = commuteToInput.value.trim();
+                        commuteFromInput.value = '';
+                        commuteToInput.value = '';
+                        break;
                     case 'links':
                         data.title = linksTitleInput.value;
                         data.links = [];
@@ -3739,6 +4019,10 @@
                 case 'calculator': buildCalculatorBubble(contentWrapper); break;
                 case 'image': buildImageBubble(contentWrapper, data); break;
                 case 'search': buildSearchBubble(bubble, contentWrapper, data); break;
+                case 'sports': buildSportsBubble(bubble, contentWrapper, apiData, data); break;
+                case 'currency': buildCurrencyBubble(contentWrapper, apiData, data); break;
+                case 'onthisday': buildOnThisDayBubble(contentWrapper, apiData); break;
+                case 'commute': buildCommuteBubble(contentWrapper, data); break;
                 case 'links': buildLinksBubble(bubble, contentWrapper, data); break;
                 case 'todo': buildTodoBubble(contentWrapper, data); break;
                 case 'worldClock': buildWorldClockBubble(bubble, contentWrapper, data); break;
@@ -3960,6 +4244,9 @@
                 case 'reddit': return await getRedditData(data.subreddit);
                 case 'crypto': return await getCryptoData(data.coinId);
                 case 'quote': return await getQuoteData(data.tag);
+                case 'sports': return await getSportsData(data.league);
+                case 'currency': return await getCurrencyData(data.base, data.targets);
+                case 'onthisday': return await getOnThisDayData();
                 default: return data;
             }
         }
@@ -4056,6 +4343,9 @@
                     case 'reddit': apiData = await getRedditData(data.subreddit); break;
                     case 'crypto': apiData = await getCryptoData(data.coinId); break;
                     case 'quote': apiData = await getQuoteData(data.tag); break;
+                    case 'sports': apiData = await getSportsData(data.league); break;
+                    case 'currency': apiData = await getCurrencyData(data.base, data.targets); break;
+                    case 'onthisday': apiData = await getOnThisDayData(); break;
                     case 'group': apiData = data; break; // members fetch themselves
                     default: apiData = data; // For bubbles with no API
                 }
@@ -4071,7 +4361,7 @@
                  // toast that fades in 3s. That reads exactly like "this
                  // ticker doesn't load" even though other tickers work fine
                  // moments later.
-                 if (type === 'weather' || type === 'news' || type === 'reddit' || type === 'crypto' || type === 'quote' || type === 'stock') {
+                 if (type === 'weather' || type === 'news' || type === 'reddit' || type === 'crypto' || type === 'quote' || type === 'stock' || type === 'sports' || type === 'currency' || type === 'onthisday') {
                      apiData = { error: true, message: error.message }; // Pass error state
                  } else {
                     throw error; // Stop bubble creation for others
@@ -4098,6 +4388,7 @@
              let defaultHeight = BUBBLE_DEFAULT_HEIGHT;
              if (type === 'news' || type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
              if (type === 'todo' || type === 'links') defaultHeight = BUBBLE_TODO_HEIGHT;
+             if (type === 'sports' || type === 'onthisday') defaultHeight = BUBBLE_NEWS_HEIGHT;
              // 16:9 plus the header, so a video doesn't open letterboxed.
              // This is the block that actually decides the size -- it writes
              // data.height, which then wins over buildBubbleShell's own
