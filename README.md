@@ -2,6 +2,8 @@
 
 **[Open the dashboard](https://3thand.github.io/weatherbubb/) — reinventing the homepage.**
 
+*(Moving to [weatherbubb.com](https://weatherbubb.com) once its DNS points at GitHub Pages.)*
+
 A dashboard made of floating glass bubbles. Each one does a thing — weather,
 stocks, crypto, news, a subreddit, a clock, a calculator, a to-do list — and
 they drift around a physics canvas you can shove, resize, lock, merge and

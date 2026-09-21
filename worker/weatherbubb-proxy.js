@@ -44,9 +44,9 @@ const ALLOWED_TARGET_HOSTS = new Set([
 ]);
 
 const ALLOWED_ORIGINS = new Set([
-  // 3thand.github.io is the live origin. The weatherbubb.com entries are
-  // kept deliberately: they cost nothing, and if the domain is ever picked
-  // up again the relay keeps working without a worker redeploy.
+  // Both are live targets: github.io serves the site today, and
+  // weatherbubb.com takes over once its DNS points at GitHub Pages. Having
+  // both here means the cutover needs no worker redeploy.
   'https://3thand.github.io',
   'https://weatherbubb.com',
   'https://www.weatherbubb.com',
@@ -212,7 +212,7 @@ export default {
         // no Authorization, nothing identifying the original caller.
         headers: {
           'Accept': '*/*',
-          'User-Agent': 'weatherbubb-proxy (+https://github.com/3thanD/weatherbubb)',
+          'User-Agent': 'weatherbubb-proxy (+https://weatherbubb.com)',
         },
         redirect: 'follow',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
