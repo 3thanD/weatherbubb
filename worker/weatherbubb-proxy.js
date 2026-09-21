@@ -34,6 +34,10 @@ const ALLOWED_TARGET_HOSTS = new Set([
   'query2.finance.yahoo.com',
   'zenquotes.io',
   'news.google.com',
+  // Reddit stopped sending CORS headers on its .json endpoints, so a
+  // browser can't read them directly however well-formed the request is.
+  'www.reddit.com',
+  'old.reddit.com',
 ]);
 
 const ALLOWED_ORIGINS = new Set([

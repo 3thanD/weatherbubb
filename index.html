@@ -1015,6 +1015,23 @@
             color: #000; border: 0; border-radius: 0.3rem; cursor: pointer; font-weight: 700;
         }
 
+        .reddit-view { display: flex; flex-direction: column; height: 100%; padding: 0.5rem; }
+        .reddit-head { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+        .reddit-refresh-btn {
+            background: none; border: 0; color: inherit; cursor: pointer;
+            font-size: 1rem; line-height: 1; opacity: 0.6; padding: 0 3px;
+        }
+        .reddit-refresh-btn:hover { opacity: 1; }
+        .reddit-list { flex: 1; overflow-y: auto; min-height: 0; margin-top: 0.25rem; }
+        .reddit-item { display: flex; align-items: baseline; gap: 0.4rem; padding: 0.28rem 0.15rem; }
+        .reddit-score {
+            flex-shrink: 0; font-size: 0.66rem; font-weight: 700;
+            color: var(--wb-accent-solid); min-width: 2.2em; text-align: right;
+        }
+        .reddit-title { flex: 1; font-size: 0.76rem; line-height: 1.25; }
+        .reddit-meta { flex-shrink: 0; font-size: 0.62rem; opacity: 0.55; }
+        .reddit-updated { font-size: 0.62rem; opacity: 0.5; padding-top: 0.25rem; }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1797,7 +1814,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0418';
+        const BUILD_ID = '2026-09-21-0420';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -1831,6 +1848,8 @@
             'query2.finance.yahoo.com',
             'zenquotes.io',
             'news.google.com',
+            'www.reddit.com',
+            'old.reddit.com',
         ]);
 
         function hostnameOf(url) {
@@ -2069,17 +2088,41 @@
         }
         
         // NEW: Reddit Feed
+        const REDDIT_POST_LIMIT = 10;
+
+        // Reddit used to be fetchable straight from the browser. It isn't
+        // any more -- www.reddit.com sends no Access-Control-Allow-Origin on
+        // its .json endpoints, so the browser discards the response whatever
+        // it contains, which is why this bubble stopped working. It goes
+        // through the relay now, like the other non-CORS sources.
         async function getRedditData(subreddit) {
-            const startedAt = performance.now();
-            const response = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=10`);
-            if (!response.ok) {
-                debugLog('warn', `[Reddit:${subreddit}] failed after ${Math.round(performance.now() - startedAt)}ms -- HTTP ${response.status}`);
-                throw new Error(`Could not find subreddit 'r/${subreddit}'.`);
+            const clean = String(subreddit || '').trim().replace(/^\/?r\//i, '').replace(/\/$/, '');
+            if (!/^[A-Za-z0-9_]{2,40}$/.test(clean)) {
+                throw new Error(`"${subreddit}" isn't a valid subreddit name.`);
             }
-            const data = await response.json();
-            if (!data.data || !data.data.children) throw new Error("Invalid Reddit data.");
-            debugLog('info', `[Reddit:${subreddit}] OK (${Math.round(performance.now() - startedAt)}ms)`);
-            return data.data.children.map(post => post.data);
+            const startedAt = performance.now();
+            // Cache-bust so a relay-cached error for one subreddit doesn't stick.
+            const url = `https://www.reddit.com/r/${clean}/hot.json?limit=${REDDIT_POST_LIMIT}&raw_json=1&_=${Date.now()}`;
+
+            let raw;
+            try {
+                raw = await fetchViaProxy(url, `Reddit:${clean}`);
+            } catch (e) {
+                throw new Error(`Couldn't reach Reddit for r/${clean}. Check the relay in Debug.`);
+            }
+
+            let data;
+            try { data = JSON.parse(raw); } catch {
+                throw new Error(`Reddit returned something unreadable for r/${clean}.`);
+            }
+            if (data && data.error) throw new Error(`Reddit says: ${data.message || data.error} (r/${clean})`);
+            if (!data || !data.data || !Array.isArray(data.data.children)) {
+                throw new Error(`No subreddit called r/${clean}.`);
+            }
+            const posts = data.data.children.map(c => c.data).filter(Boolean);
+            if (!posts.length) throw new Error(`r/${clean} has no posts to show.`);
+            debugLog('info', `[Reddit:${clean}] OK -- ${posts.length} posts (${Math.round(performance.now() - startedAt)}ms)`);
+            return posts;
         }
 
         // Crypto (via CoinGecko)
@@ -2673,17 +2716,63 @@
             contentWrapper.innerHTML = listHTML;
         }
 
-        function buildRedditBubble(contentWrapper, posts, data) {
-            let listHTML = `<div class="bubble-content-view p-2"><h3 class="text-lg font-bold text-orange-500 mb-1">r/${data.subreddit}</h3><div class="news-list">`;
-            if (posts && posts.length > 0) {
-                posts.forEach(post => {
-                    listHTML += `<a href="https://reddit.com${post.permalink}" target="_blank" class="news-item">(${post.score}) ${post.title}</a>`;
-                });
-            } else {
-                listHTML += `<p class="text-gray-400">No posts found.</p>`;
+        const REDDIT_REFRESH_MS = 5 * 60 * 1000;
+
+        function renderRedditPosts(listEl, posts) {
+            // Post titles are other people's text arriving over the network,
+            // so they're escaped rather than interpolated raw.
+            listEl.innerHTML = (posts || []).map(post => {
+                const href = `https://www.reddit.com${post.permalink || ''}`;
+                const score = typeof post.score === 'number' ? post.score : 0;
+                const comments = typeof post.num_comments === 'number' ? post.num_comments : 0;
+                return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="news-item reddit-item">
+                            <span class="reddit-score">${escapeHtml(String(score))}</span>
+                            <span class="reddit-title">${escapeHtml(post.title || '(untitled)')}</span>
+                            <span class="reddit-meta">${escapeHtml(String(comments))} comments</span>
+                        </a>`;
+            }).join('') || '<p class="text-gray-400 text-xs">No posts found.</p>';
+        }
+
+        function buildRedditBubble(bubble, contentWrapper, posts, data) {
+            const sub = String(data.subreddit || '').replace(/^\/?r\//i, '');
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view reddit-view">
+                    <div class="reddit-head">
+                        <h3 class="text-base font-bold text-orange-500">r/${escapeHtml(sub)}</h3>
+                        <button class="reddit-refresh-btn" title="Refresh now">&#x21bb;</button>
+                    </div>
+                    <div class="news-list reddit-list"></div>
+                    <div class="reddit-updated"></div>
+                </div>`;
+
+            const listEl = contentWrapper.querySelector('.reddit-list');
+            const stamp = contentWrapper.querySelector('.reddit-updated');
+            const markUpdated = () => { stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`; };
+
+            renderRedditPosts(listEl, posts);
+            markUpdated();
+
+            async function refresh(manual) {
+                // Don't hammer Reddit from a tab nobody is looking at.
+                if (!manual && document.visibilityState === 'hidden') return;
+                try {
+                    const fresh = await getRedditData(sub);
+                    renderRedditPosts(listEl, fresh);
+                    markUpdated();
+                } catch (e) {
+                    // A failed refresh keeps the posts already on screen --
+                    // stale data beats an empty bubble.
+                    debugLog('warn', `[Reddit:${sub}] refresh failed: ${e.message}`);
+                    stamp.textContent = `Update failed ${new Date().toLocaleTimeString()}`;
+                    if (manual) showNotification(e.message, 'error');
+                }
             }
-            listHTML += '</div></div>';
-            contentWrapper.innerHTML = listHTML;
+
+            contentWrapper.querySelector('.reddit-refresh-btn').addEventListener('click', () => refresh(true));
+
+            // removeBubble() clears this, so closing the bubble stops the timer.
+            if (bubble.intervalId) clearInterval(bubble.intervalId);
+            bubble.intervalId = setInterval(() => refresh(false), REDDIT_REFRESH_MS);
         }
 
         function buildCryptoBubble(contentWrapper, apiData, data) {
@@ -3469,7 +3558,7 @@
                 case 'weather': buildWeatherBubble(contentWrapper, apiData); break;
                 case 'stock': buildStockBubble(contentWrapper, apiData); break;
                 case 'news': buildNewsBubble(contentWrapper, apiData); break;
-                case 'reddit': buildRedditBubble(contentWrapper, apiData, data); break;
+                case 'reddit': buildRedditBubble(bubble, contentWrapper, apiData, data); break;
                 case 'crypto': buildCryptoBubble(contentWrapper, apiData, data); break;
                 case 'quote': buildQuoteBubble(contentWrapper, apiData); break;
                 case 'digitalClock': buildDigitalClockBubble(bubble, contentWrapper, data); break;
