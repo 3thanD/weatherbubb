@@ -44,9 +44,12 @@ const ALLOWED_TARGET_HOSTS = new Set([
 ]);
 
 const ALLOWED_ORIGINS = new Set([
+  // 3thand.github.io is the live origin. The weatherbubb.com entries are
+  // kept deliberately: they cost nothing, and if the domain is ever picked
+  // up again the relay keeps working without a worker redeploy.
+  'https://3thand.github.io',
   'https://weatherbubb.com',
   'https://www.weatherbubb.com',
-  'https://3thand.github.io',
 ]);
 
 const CACHE_SECONDS = 60;
@@ -209,7 +212,7 @@ export default {
         // no Authorization, nothing identifying the original caller.
         headers: {
           'Accept': '*/*',
-          'User-Agent': 'weatherbubb-proxy (+https://weatherbubb.com)',
+          'User-Agent': 'weatherbubb-proxy (+https://github.com/3thanD/weatherbubb)',
         },
         redirect: 'follow',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
