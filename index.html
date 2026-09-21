@@ -834,6 +834,15 @@
         .joke-controls .bubble-btn { margin-top: 0; flex-shrink: 0; }
         .joke-counter { flex-shrink: 0; }
 
+        .relay-wrapper { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .relay-wrapper .bubble-input { width: 100%; font-size: 0.75rem; }
+        .relay-buttons { display: flex; gap: 0.4rem; }
+        .relay-buttons button { flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; }
+        .relay-status { font-size: 0.72rem; line-height: 1.35; word-break: break-word; min-height: 1em; }
+        .relay-status.ok { color: #34d399; }
+        .relay-status.bad { color: #f87171; }
+        .relay-status.busy { color: var(--wb-sidebar-text); opacity: 0.75; }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1133,6 +1142,15 @@
                 </svg>
                 <span>Show Debug Log</span>
             </button>
+            <div class="relay-wrapper">
+                <label for="relay-url-input" class="slider-label">Data relay URL:</label>
+                <input type="text" id="relay-url-input" placeholder="https://....workers.dev" class="bubble-input" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <div class="relay-buttons">
+                    <button id="relay-test-btn" title="Check the relay is reachable and accepts this site">Test relay</button>
+                    <button id="relay-reset-btn" title="Go back to the relay built into this build">Reset</button>
+                </div>
+                <div id="relay-status" class="relay-status"></div>
+            </div>
         </div>
 
         <!-- Donate Section -->
@@ -1488,7 +1506,25 @@
         // timing out on 100% of requests. A relay we control is the only
         // durable fix. No API key is involved -- none of the upstream APIs
         // need one, so there's nothing secret in that URL.
-        const CUSTOM_PROXY_URL = 'https://weatherbubb-proxy.ethamdavis89.workers.dev';
+        const DEFAULT_PROXY_URL = 'https://weatherbubb-proxy.ethamdavis89.workers.dev';
+
+        // The relay is overridable from the sidebar, and that override is
+        // the point rather than a nicety: the built-in URL is only correct
+        // for as long as the deployed worker keeps that exact hostname.
+        // When it doesn't -- renamed worker, different account subdomain,
+        // workers.dev route switched off -- the address 404s, and a 404
+        // from the edge carries no CORS headers, so the browser reports a
+        // bare "Failed to fetch" with no status. That is indistinguishable
+        // from the relay being down, and previously the only way to try a
+        // corrected URL was to edit this file and redeploy the whole site.
+        // Now it's a text box and a Test button.
+        function getRelayUrl() {
+            try {
+                const stored = (localStorage.getItem('relayUrl') || '').trim();
+                if (stored) return stored.replace(/\/+$/, '');
+            } catch { /* storage blocked; fall through to the built-in */ }
+            return DEFAULT_PROXY_URL;
+        }
 
         // Hosts we know don't send Access-Control-Allow-Origin, so a direct
         // browser fetch can only ever fail. Mirrors the worker's own
@@ -1518,8 +1554,9 @@
             // actually works (allorigins), it had already burned 15-25+
             // seconds on three guaranteed failures.
             const direct = { name: 'direct', build: (u) => u };
-            const worker = CUSTOM_PROXY_URL
-                ? { name: 'worker', build: (u) => `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(u)}` }
+            const relayUrl = getRelayUrl();
+            const worker = relayUrl
+                ? { name: 'worker', build: (u) => `${relayUrl}?url=${encodeURIComponent(u)}` }
                 : null;
             // Kept as a last-ditch fallback only. Currently failing 100% of
             // the time from at least one real device, so it is not
@@ -3366,6 +3403,118 @@
             localStorage.setItem('dashboardTheme', theme);
         });
 
+        // --- Data relay settings + self-test ---
+        const relayUrlInput = document.getElementById('relay-url-input');
+        const relayTestBtn = document.getElementById('relay-test-btn');
+        const relayResetBtn = document.getElementById('relay-reset-btn');
+        const relayStatus = document.getElementById('relay-status');
+
+        function setRelayStatus(kind, text) {
+            relayStatus.className = 'relay-status ' + kind;
+            relayStatus.textContent = text;
+        }
+
+        function saveRelayUrl(raw) {
+            const trimmed = (raw || '').trim().replace(/\/+$/, '');
+            if (!trimmed) {
+                try { localStorage.removeItem('relayUrl'); } catch { }
+                return { ok: true, url: DEFAULT_PROXY_URL, usingDefault: true };
+            }
+            // Only reject what genuinely can't work. An http:// relay would
+            // be blocked as mixed content on an https page, and a bare
+            // hostname would resolve as a path on this site rather than as
+            // a URL -- both fail in ways that look like the relay is down.
+            let parsed;
+            try { parsed = new URL(trimmed); } catch {
+                return { ok: false, error: "That isn't a full URL. It needs to start with https://" };
+            }
+            if (parsed.protocol !== 'https:') {
+                return { ok: false, error: 'The relay must be https:// -- anything else is blocked as mixed content.' };
+            }
+            try { localStorage.setItem('relayUrl', trimmed); } catch {
+                return { ok: false, error: "Couldn't save -- this browser is blocking local storage." };
+            }
+            return { ok: true, url: trimmed, usingDefault: false };
+        }
+
+        // Asks the relay's /health endpoint what it is and whether it will
+        // accept this origin. This distinguishes the failure modes that all
+        // look identical from inside a fetch(): nothing deployed at that
+        // hostname, something else deployed there, or our worker deployed
+        // but refusing this origin.
+        async function testRelay() {
+            const saved = saveRelayUrl(relayUrlInput.value);
+            if (!saved.ok) {
+                setRelayStatus('bad', saved.error);
+                debugLog('error', `[Relay] ${saved.error}`);
+                return;
+            }
+            relayUrlInput.value = saved.usingDefault ? '' : saved.url;
+            const base = saved.url;
+            setRelayStatus('busy', 'Testing ' + base + ' ...');
+            debugLog('info', `[Relay] Testing ${base}/health from origin ${window.location.origin}`);
+
+            let response;
+            const startedAt = performance.now();
+            try {
+                response = await fetchWithTimeout(base + '/health');
+            } catch (e) {
+                const ms = Math.round(performance.now() - startedAt);
+                const msg = `No readable response from ${base} (${ms}ms). Either nothing is deployed at that address, or what answered sent no CORS headers -- a 404 from the edge looks exactly like this. Open ${base}/health in a tab: a 404 page means the URL is wrong.`;
+                setRelayStatus('bad', msg);
+                debugLog('error', `[Relay] ${msg} -- ${e.message}`);
+                return;
+            }
+
+            const ms = Math.round(performance.now() - startedAt);
+            let body = '';
+            try { body = (await response.text()).trim(); } catch { }
+
+            if (!response.ok) {
+                const msg = `Relay answered HTTP ${response.status} (${ms}ms): ${body.slice(0, 200)}`;
+                setRelayStatus('bad', msg);
+                debugLog('error', `[Relay] ${msg}`);
+                return;
+            }
+
+            let info = null;
+            try { info = JSON.parse(body); } catch { }
+            if (!info || info.worker !== 'weatherbubb-proxy') {
+                const msg = `Something answered at ${base}, but it isn't the WeatherBubb relay. It replied: ${body.slice(0, 120)}`;
+                setRelayStatus('bad', msg);
+                debugLog('error', `[Relay] ${msg}`);
+                return;
+            }
+
+            if (!info.originAllowed) {
+                const msg = `Relay is live, but it won't accept this site. It sees the origin as "${info.originSeen}", and only allows: ${(info.allowedOrigins || []).join(', ')}. Add that origin to ALLOWED_ORIGINS in the worker and redeploy.`;
+                setRelayStatus('bad', msg);
+                debugLog('error', `[Relay] ${msg}`);
+                return;
+            }
+
+            const msg = `Relay OK (${ms}ms). Accepts this origin (${info.originSeen}) and can reach: ${(info.allowedTargets || []).join(', ')}`;
+            setRelayStatus('ok', msg);
+            debugLog('info', `[Relay] ${msg}`);
+            showNotification('Relay is working. Refresh a stock or news bubble to use it.', 'success');
+        }
+
+        relayTestBtn.addEventListener('click', testRelay);
+        relayUrlInput.addEventListener('change', () => {
+            const saved = saveRelayUrl(relayUrlInput.value);
+            if (!saved.ok) { setRelayStatus('bad', saved.error); return; }
+            setRelayStatus('busy', saved.usingDefault
+                ? 'Using the built-in relay. Press Test relay to check it.'
+                : 'Saved. Press Test relay to check it.');
+        });
+        relayResetBtn.addEventListener('click', () => {
+            try { localStorage.removeItem('relayUrl'); } catch { }
+            relayUrlInput.value = '';
+            relayUrlInput.placeholder = DEFAULT_PROXY_URL;
+            setRelayStatus('busy', 'Back to the built-in relay.');
+            debugLog('info', '[Relay] Reset to built-in relay.');
+        });
+
         scrollSideSelect.addEventListener('change', (e) => {
             const side = e.target.value;
             mobileScrollTrack.classList.toggle('side-left', side === 'left');
@@ -3561,7 +3710,7 @@
             debugLog('info', `WeatherBubb loaded -- ${window.innerWidth}x${window.innerHeight}, UA: ${navigator.userAgent}`);
             // The relay accepts a fixed set of origins, so this line is the
             // difference between diagnosing a rejection and guessing at it.
-            debugLog('info', `[Env] origin: ${window.location.origin} | page: ${window.location.pathname} | relay: ${CUSTOM_PROXY_URL || '(none configured)'}`);
+            debugLog('info', `[Env] origin: ${window.location.origin} | page: ${window.location.pathname} | relay: ${getRelayUrl() || '(none configured)'}`);
             if (localStorage.getItem('debugMode') === '1') showDebugPanel();
 
             // Restore saved theme + float speed before physics/bubbles spin up
@@ -3571,6 +3720,14 @@
 
             const savedScrollSide = localStorage.getItem('scrollBarSide') || 'right';
             scrollSideSelect.value = savedScrollSide;
+
+            // Show the override if one is set; otherwise leave the box empty
+            // with the built-in URL as placeholder, so it's obvious which is
+            // in play without making the default look hand-entered.
+            let storedRelay = '';
+            try { storedRelay = (localStorage.getItem('relayUrl') || '').trim(); } catch { }
+            relayUrlInput.value = storedRelay;
+            relayUrlInput.placeholder = DEFAULT_PROXY_URL;
             mobileScrollTrack.classList.toggle('side-left', savedScrollSide === 'left');
 
             const savedSpeed = parseFloat(localStorage.getItem('dashboardSpeed'));
