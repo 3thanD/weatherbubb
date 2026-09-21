@@ -1032,6 +1032,33 @@
         .reddit-meta { flex-shrink: 0; font-size: 0.62rem; opacity: 0.55; }
         .reddit-updated { font-size: 0.62rem; opacity: 0.5; padding-top: 0.25rem; }
 
+        .search-view { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem; height: 100%; }
+        .search-row { display: flex; gap: 0.3rem; }
+        .search-engine {
+            flex: 1; min-width: 0; font-size: 0.72rem; padding: 0.25rem;
+            background: rgba(0,0,0,0.3); color: inherit;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 0.3rem;
+        }
+        .search-go {
+            flex-shrink: 0; width: 30px; border: 0; border-radius: 0.3rem;
+            background: var(--wb-accent-solid); cursor: pointer; font-size: 0.8rem;
+        }
+        .search-input {
+            width: 100%; font-size: 0.85rem; padding: 0.4rem 0.5rem;
+            background: rgba(0,0,0,0.3); color: inherit;
+            border: 1px solid rgba(255,255,255,0.25); border-radius: 0.4rem;
+        }
+        .search-input:focus { outline: 2px solid var(--wb-accent-solid); outline-offset: 1px; }
+        .search-history { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-wrap: wrap; gap: 0.25rem; align-content: flex-start; }
+        .search-recent-label { width: 100%; font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.04em; }
+        .search-recent {
+            font-size: 0.68rem; padding: 0.15rem 0.4rem; max-width: 100%;
+            background: rgba(255,255,255,0.1); color: inherit; border: 0;
+            border-radius: 999px; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .search-recent:hover { background: rgba(255,255,255,0.2); }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1153,6 +1180,7 @@
                 <option value="news">News Headlines</option>
                 <option value="reddit">Reddit Feed</option>
                 <option value="crypto">Crypto Ticker</option>
+                <option value="search">Web Search</option>
                 <option value="links">Quick Links</option>
                 <option value="youtube">YouTube Player</option>
                 <option value="quote">Quote of the Day</option>
@@ -1264,6 +1292,20 @@
                  <div class="input-wrapper hidden" data-type="image">
                      <label for="image-url" class="slider-label">Image URL:</label>
                     <input type="text" id="image-url" placeholder="URL..." class="bubble-input">
+                </div>
+                 <div class="input-wrapper hidden" data-type="search">
+                     <label for="search-engine-select" class="slider-label">Search with:</label>
+                     <select id="search-engine-select" class="bubble-input">
+                         <option value="google">Google</option>
+                         <option value="duckduckgo">DuckDuckGo</option>
+                         <option value="bing">Bing</option>
+                         <option value="youtube">YouTube</option>
+                         <option value="wikipedia">Wikipedia</option>
+                         <option value="reddit">Reddit</option>
+                         <option value="maps">Google Maps</option>
+                     </select>
+                     <p class="field-hint">Searches open in a new tab. You can switch
+                        engines inside the bubble at any time.</p>
                 </div>
                  <div class="input-wrapper hidden" data-type="links">
                      <label for="links-title" class="slider-label">List Title:</label>
@@ -1538,6 +1580,7 @@
         const newsTopicSelect = document.getElementById('news-topic-select');
         const youtubeInput = document.getElementById('youtube-input');
         const linksTitleInput = document.getElementById('links-title');
+        const searchEngineSelect = document.getElementById('search-engine-select');
         const redditInput = document.getElementById('reddit-input');
         const cryptoInput = document.getElementById('crypto-input');
         const quoteSelect = document.getElementById('quote-select');
@@ -1814,7 +1857,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0420';
+        const BUILD_ID = '2026-09-21-0427';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2260,19 +2303,40 @@
                         const scaleY = newHeight / oldHeight;
 
                         if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
-                            debugLog('info', `[Resize] bubble ${Math.round(oldWidth)}x${Math.round(oldHeight)} -> ${Math.round(newWidth)}x${Math.round(newHeight)} (scale ${scaleX.toFixed(2)}x/${scaleY.toFixed(2)}y)`);
-                            // Update DOM size first to match visual drag
-                             bubble.style.width = `${newWidth}px`;
-                             bubble.style.height = `${newHeight}px`;
+                            if (RESIZE_LOG_VERBOSE) {
+                                debugLog('info', `[Resize] bubble ${Math.round(oldWidth)}x${Math.round(oldHeight)} -> ${Math.round(newWidth)}x${Math.round(newHeight)} (scale ${scaleX.toFixed(2)}x/${scaleY.toFixed(2)}y)`);
+                            }
+
+                            // Only touch the DOM when the observed size had to
+                            // be clamped. Writing the size back unconditionally
+                            // re-triggers this very observer, and the browser
+                            // aborts that feedback loop with "ResizeObserver
+                            // loop completed with undelivered notifications" --
+                            // which the live log threw on essentially every
+                            // frame of every drag. The drag handler has already
+                            // set the size; echoing it back achieves nothing.
+                            if (Math.round(newWidth) !== Math.round(observedWidth) ||
+                                Math.round(newHeight) !== Math.round(observedHeight)) {
+                                bubble.style.width = `${newWidth}px`;
+                                bubble.style.height = `${newHeight}px`;
+                            }
 
                             // Scale physics body
                             Body.scale(body, scaleX, scaleY);
-                            // IMPORTANT: Update position because scaling changes the center
-                            Body.setPosition(body, {
-                                x: body.position.x + (newWidth - oldWidth) / 2,
-                                y: body.position.y + (newHeight - oldHeight) / 2
-                            });
-                            
+                            // Resizing happens from the bottom-right corner, so
+                            // hold the top-left still and move the centre by
+                            // half the growth.
+                            const desiredX = body.position.x + (newWidth - oldWidth) / 2;
+                            const desiredY = body.position.y + (newHeight - oldHeight) / 2;
+                            // Keep the body inside the walls. A bubble grown
+                            // near an edge otherwise ends up overlapping a
+                            // static wall, and Matter resolves that penetration
+                            // by launching it -- which is how bubbles were
+                            // disappearing off-screen mid-resize.
+                            Body.setPosition(body, clampBodyPosition(desiredX, desiredY, newWidth, newHeight));
+                            Body.setVelocity(body, { x: 0, y: 0 });
+                            Body.setAngularVelocity(body, 0);
+
                             body.customWidth = newWidth;
                             body.customHeight = newHeight;
                             
@@ -2427,11 +2491,27 @@
                 if (!gustStart || !gustLineEl) return;
                 updateGustLine(gustStart, { x: e.clientX, y: e.clientY });
             });
-            window.addEventListener('pointerup', (e) => {
+            function endGust(e, apply) {
                 if (!gustStart) return;
-                applyWindGust(gustStart, { x: e.clientX, y: e.clientY });
+                if (apply && e) applyWindGust(gustStart, { x: e.clientX, y: e.clientY });
                 gustStart = null;
                 if (gustLineEl) { gustLineEl.remove(); gustLineEl = null; }
+            }
+
+            window.addEventListener('pointerup', (e) => endGust(e, true));
+            // pointerup is not guaranteed. A pointer can be cancelled by the
+            // OS or another gesture, the button can be released outside the
+            // window, or focus can move away mid-drag -- and in every one of
+            // those cases the old code left gustStart set and the yellow line
+            // stuck on screen following the cursor forever, which is exactly
+            // what the report described.
+            window.addEventListener('pointercancel', () => endGust(null, false));
+            window.addEventListener('blur', () => endGust(null, false));
+            document.addEventListener('pointerleave', (e) => {
+                if (e.target === document && gustStart) endGust(null, false);
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') endGust(null, false);
             });
         }
 
@@ -3130,6 +3210,92 @@
             try { return new URL(href).origin + '/favicon.ico'; } catch { return ''; }
         }
 
+        // Every major homepage leads with a search box; this was the single
+        // biggest thing WeatherBubb didn't have. Deliberately keyless: each
+        // engine is just a URL with the query appended, so there's no API,
+        // no relay hop and no quota, and nothing about the search passes
+        // through this app or the worker -- the browser goes straight to the
+        // engine, exactly as it would from the address bar.
+        const SEARCH_ENGINES = {
+            google:     { label: 'Google',     url: 'https://www.google.com/search?q=' },
+            duckduckgo: { label: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+            bing:       { label: 'Bing',       url: 'https://www.bing.com/search?q=' },
+            youtube:    { label: 'YouTube',    url: 'https://www.youtube.com/results?search_query=' },
+            wikipedia:  { label: 'Wikipedia',  url: 'https://en.wikipedia.org/w/index.php?search=' },
+            reddit:     { label: 'Reddit',     url: 'https://www.reddit.com/search/?q=' },
+            maps:       { label: 'Maps',       url: 'https://www.google.com/maps/search/' },
+        };
+        const SEARCH_HISTORY_MAX = 8;
+
+        function buildSearchBubble(bubble, contentWrapper, data) {
+            if (!SEARCH_ENGINES[data.engine]) data.engine = 'google';
+            if (!Array.isArray(data.history)) data.history = [];
+
+            const options = Object.entries(SEARCH_ENGINES)
+                .map(([key, e]) => `<option value="${key}" ${key === data.engine ? 'selected' : ''}>${escapeHtml(e.label)}</option>`)
+                .join('');
+
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view search-view">
+                    <div class="search-row">
+                        <select class="search-engine">${options}</select>
+                        <button class="search-go" title="Search">&#x1F50D;</button>
+                    </div>
+                    <input type="search" class="search-input" placeholder="Search the web..."
+                           autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <div class="search-history"></div>
+                </div>`;
+
+            const input = contentWrapper.querySelector('.search-input');
+            const engineSel = contentWrapper.querySelector('.search-engine');
+            const historyEl = contentWrapper.querySelector('.search-history');
+
+            const persist = () => {
+                bubble.dataset.bubbleData = JSON.stringify(data);
+                saveBubblesState();
+            };
+
+            function renderHistory() {
+                if (!data.history.length) { historyEl.innerHTML = ''; return; }
+                historyEl.innerHTML = '<div class="search-recent-label">Recent</div>' +
+                    data.history.map((q, i) =>
+                        `<button class="search-recent" data-i="${i}" title="${escapeHtml(q)}">${escapeHtml(q)}</button>`
+                    ).join('');
+            }
+
+            function run(query) {
+                const q = (query || '').trim();
+                if (!q) return;
+                const engine = SEARCH_ENGINES[engineSel.value] || SEARCH_ENGINES.google;
+
+                // Recent searches are stored, and a sync code carries them to
+                // another machine, so keep the list short and let it be
+                // cleared. encodeURIComponent so a query containing & or #
+                // reaches the engine intact rather than being truncated.
+                data.history = [q, ...data.history.filter(h => h !== q)].slice(0, SEARCH_HISTORY_MAX);
+                data.engine = engineSel.value;
+                renderHistory();
+                persist();
+
+                // noopener so the opened tab can't reach back through
+                // window.opener into this page.
+                window.open(engine.url + encodeURIComponent(q), '_blank', 'noopener,noreferrer');
+                input.value = '';
+            }
+
+            contentWrapper.querySelector('.search-go').addEventListener('click', () => run(input.value));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); run(input.value); }
+            });
+            engineSel.addEventListener('change', () => { data.engine = engineSel.value; persist(); });
+            historyEl.addEventListener('click', (e) => {
+                const btn = e.target.closest('.search-recent');
+                if (btn) run(data.history[parseInt(btn.dataset.i, 10)]);
+            });
+
+            renderHistory();
+        }
+
         function buildLinksBubble(bubble, contentWrapper, data) {
             if (!Array.isArray(data.links)) data.links = [];
 
@@ -3518,6 +3684,9 @@
                         data.url = imageUrl.value;
                         imageUrl.value = '';
                         break;
+                    case 'search':
+                        data.engine = searchEngineSelect.value;
+                        break;
                     case 'links':
                         data.title = linksTitleInput.value;
                         data.links = [];
@@ -3569,6 +3738,7 @@
                 case 'youtube': buildYouTubeBubble(contentWrapper, data); break;
                 case 'calculator': buildCalculatorBubble(contentWrapper); break;
                 case 'image': buildImageBubble(contentWrapper, data); break;
+                case 'search': buildSearchBubble(bubble, contentWrapper, data); break;
                 case 'links': buildLinksBubble(bubble, contentWrapper, data); break;
                 case 'todo': buildTodoBubble(contentWrapper, data); break;
                 case 'worldClock': buildWorldClockBubble(bubble, contentWrapper, data); break;
@@ -3642,6 +3812,16 @@
             };
             handle.addEventListener('pointerup', finish);
             handle.addEventListener('pointercancel', finish);
+            handle.addEventListener('lostpointercapture', () => {
+                // Capture can be lost without pointerup ever arriving, which
+                // would strand the connector line and the target outline.
+                if (mergeDrag) {
+                    mergeDrag.line.remove();
+                    if (mergeDrag.target) mergeDrag.target.classList.remove('merge-target');
+                    handle.classList.remove('dragging');
+                    mergeDrag = null;
+                }
+            });
         }
 
         // Merging is target-anchored: the result takes the target's place and
@@ -3674,13 +3854,84 @@
                 isStatic: targetData.isStatic,
             };
 
+            // Create the group BEFORE destroying the originals. The other
+            // order loses both bubbles outright if anything in creation
+            // throws -- a fetch, a render, a bad saved field -- and there is
+            // nothing left to recover from. This way a failed merge leaves
+            // the dashboard exactly as it was.
+            let group;
+            try {
+                group = await createAndDisplayBubble('group', groupData);
+            } catch (e) {
+                debugLog('error', `[Merge] failed, both bubbles kept: ${e.message}`);
+                showNotification("Couldn't merge those -- nothing was changed.", 'error');
+                return;
+            }
+            if (!group) {
+                debugLog('error', '[Merge] produced no bubble, both originals kept');
+                showNotification("Couldn't merge those -- nothing was changed.", 'error');
+                return;
+            }
+
             removeBubble(source);
             removeBubble(target);
-            await createAndDisplayBubble('group', groupData);
             saveBubblesState();
             debugLog('info', `[Merge] combined into a group of ${children.length}`);
             showNotification(`Merged ${children.length} bubbles.`, 'success');
         }
+
+        // One resize drag produces dozens of observations, and logging each
+        // one buries everything else in the debug panel -- the last report
+        // was ~90% resize lines. Off by default; the drag still logs its
+        // final size.
+        const RESIZE_LOG_VERBOSE = false;
+
+        // Keeps a body fully inside the play area. Matter treats the walls as
+        // solid, so a body that ends up overlapping one gets pushed out hard
+        // enough to leave the screen entirely.
+        function clampBodyPosition(x, y, width, height) {
+            const halfW = width / 2;
+            const halfH = height / 2;
+            const maxX = Math.max(halfW, contentWidth - halfW);
+            const maxY = Math.max(halfH, contentHeight - halfH);
+            return {
+                x: Math.min(Math.max(x, halfW), maxX),
+                y: Math.min(Math.max(y, halfH), maxY),
+            };
+        }
+
+        // Safety net for bubbles that escape anyway. Physics is not fully
+        // predictable -- a bad collision, a big resize next to a wall, or a
+        // strong gust can eject a body past the boundary, and once out it
+        // just keeps going. Rather than try to make that impossible, notice
+        // it and bring them back.
+        function recoverEscapedBubbles() {
+            if (isMobileViewport) return;
+            let recovered = 0;
+            for (const [bubble, bodyId] of reverseBubbleMap.entries()) {
+                const body = Composite.get(matterWorld, bodyId, 'body');
+                if (!body || body.isStatic) continue;
+                const w = body.customWidth || BUBBLE_DEFAULT_WIDTH;
+                const h = body.customHeight || BUBBLE_DEFAULT_HEIGHT;
+                const { x, y } = body.position;
+                const outOfBounds =
+                    !Number.isFinite(x) || !Number.isFinite(y) ||
+                    x < -w || x > contentWidth + w ||
+                    y < -h || y > contentHeight + h;
+                if (!outOfBounds) continue;
+                Body.setPosition(body, clampBodyPosition(
+                    Number.isFinite(x) ? x : contentWidth / 2,
+                    Number.isFinite(y) ? y : contentHeight / 2, w, h));
+                Body.setVelocity(body, { x: 0, y: 0 });
+                Body.setAngularVelocity(body, 0);
+                recovered++;
+            }
+            if (recovered) {
+                debugLog('warn', `[Physics] recovered ${recovered} bubble(s) that left the screen`);
+                showNotification(`Brought ${recovered} stray bubble${recovered > 1 ? 's' : ''} back.`, 'info');
+            }
+        }
+        setInterval(recoverEscapedBubbles, 1000);
 
         // Teardown for a bubble, shared by the close button and by merging
         // (which removes the originals once they've been absorbed). Skipping
