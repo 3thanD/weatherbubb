@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Bubbles</title>
+    <title>Weatherbubb.com - Reinventing the homepage</title>
     <!-- Load Tailwind CSS --><script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Google Fonts 'Inter' and 'Permanent Marker' --><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Permanent+Marker&display=swap" rel="stylesheet">
     
@@ -889,6 +889,62 @@
         }
         .field-hint strong { font-weight: 700; opacity: 1; }
 
+        .sidebar-section .section-toggle {
+            display: flex; align-items: center; justify-content: space-between;
+            cursor: pointer; user-select: none; gap: 0.5rem;
+        }
+        .sidebar-section .section-toggle .chevron {
+            width: 1rem; height: 1rem; flex-shrink: 0;
+            transition: transform 0.2s ease; opacity: 0.7;
+        }
+        .sidebar-section.collapsed .section-toggle .chevron { transform: rotate(-90deg); }
+        .sidebar-section.collapsed .section-body { display: none; }
+        .sidebar-section .section-toggle:focus-visible { outline: 2px solid var(--wb-accent-solid); outline-offset: 2px; }
+
+        /* Sync dialog */
+        #sync-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1200; padding: 16px;
+            transform: translateZ(0);
+        }
+        #sync-overlay.visible { display: flex; }
+        #sync-dialog {
+            background: var(--wb-topbar-bg); color: var(--wb-sidebar-text);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 0.75rem;
+            max-width: 520px; width: 100%; max-height: 85vh; overflow-y: auto;
+            padding: 1.25rem; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        }
+        #sync-dialog h3 { font-size: 1.1rem; font-weight: 700; margin: 0 0 0.35rem 0; }
+        #sync-dialog p { font-size: 0.8rem; opacity: 0.85; margin: 0 0 0.75rem 0; line-height: 1.45; }
+        #sync-dialog textarea {
+            width: 100%; height: 110px; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 0.7rem; word-break: break-all; resize: vertical;
+            background: rgba(0,0,0,0.35); color: inherit;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 0.5rem; padding: 0.5rem;
+        }
+        .sync-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; }
+        .sync-row button { flex: 1 1 auto; min-width: 120px; }
+        #sync-status { font-size: 0.75rem; margin-top: 0.6rem; min-height: 1em; line-height: 1.4; }
+        #sync-status.ok { color: #34d399; }
+        #sync-status.bad { color: #f87171; }
+
+        .youtube-view { padding: 0; width: 100%; height: 100%; display: flex; }
+        .youtube-view iframe {
+            width: 100%; height: 100%; border: 0; display: block;
+            /* The iframe swallows pointer events, which is what makes the
+               player usable; the header stays available for dragging. */
+            pointer-events: auto;
+        }
+
+        .bg-custom-colors { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .color-row { display: flex; gap: 0.4rem; align-items: center; }
+        .color-row input[type="color"] {
+            width: 38px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 0.4rem; background: transparent; cursor: pointer; flex-shrink: 0;
+        }
+        .color-row button { flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1010,6 +1066,7 @@
                 <option value="news">News Headlines</option>
                 <option value="reddit">Reddit Feed</option>
                 <option value="crypto">Crypto Ticker</option>
+                <option value="youtube">YouTube Player</option>
                 <option value="quote">Quote of the Day</option>
                 <option value="digitalClock">Digital Clock</option>
                 <option value="analogClock">Analog Clock</option>
@@ -1050,7 +1107,15 @@
                      <p class="field-hint">Any symbol works. Capitals are added
                         as you type, and dots are fine (<strong>BRK.B</strong>).</p>
                 </div>
-                 <div class="input-wrapper hidden" data-type="news">
+                 <div class="input-wrapper hidden" data-type="youtube">
+                     <label for="youtube-input" class="slider-label">YouTube link:</label>
+                     <input type="text" id="youtube-input" class="bubble-input"
+                            placeholder="Paste a video or playlist URL" autocapitalize="off" autocorrect="off" spellcheck="false">
+                     <p class="field-hint">Plays a video or playlist inline. YouTube
+                        refuses to load its own site in a frame, so this can't browse
+                        your account &mdash; paste links instead.</p>
+                </div>
+                <div class="input-wrapper hidden" data-type="news">
                      <label for="news-topic-select" class="slider-label">Topic:</label>
                     <select id="news-topic-select" class="bubble-input">
                         <option value="world">World</option> <option value="business">Business</option> <option value="technology">Tech</option> <option value="entertainment">Entertainment</option> <option value="science">Science</option>
@@ -1173,8 +1238,19 @@
                  <select id="custom-bg-select" class="bubble-input">
                     <option value="">-- Preset BGs --</option>
                  </select>
-                 <input type="text" id="custom-bg-input" placeholder="Or Paste URL..." class="bubble-input">
+                 <input type="text" id="custom-bg-input" placeholder="Or paste an image URL..." class="bubble-input">
                  <button id="set-bg-btn">Set</button>
+             </div>
+             <div class="bg-custom-colors">
+                 <label class="slider-label">Or build your own:</label>
+                 <div class="color-row">
+                     <input type="color" id="bg-color-a" value="#0f172a" title="Top colour">
+                     <input type="color" id="bg-color-b" value="#334155" title="Bottom colour">
+                     <button id="bg-color-apply" title="Use these two colours as a gradient">Apply gradient</button>
+                 </div>
+                 <div class="color-row">
+                     <button id="bg-color-solid" title="Use the first colour on its own">Solid colour</button>
+                 </div>
              </div>
         </div>
 
@@ -1192,6 +1268,12 @@
                    <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                  </svg>
                  <span>Arrange Bubbles</span>
+             </button>
+            <button id="sync-code-btn" title="Want to use your settings on another computer? Click here to save and load a configuration code to restore your last configuration.">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                     <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                 </svg>
+                 <span>Sync to Another Computer</span>
              </button>
             <button id="save-layout-btn">Save Layout</button>
              <button id="load-layout-btn">Load Layout</button> <!-- NEW -->
@@ -1212,8 +1294,15 @@
         </div>
         
         <!-- Debug Section -->
-        <div class="sidebar-section">
-            <h2>Debug</h2>
+        <div class="sidebar-section collapsible collapsed" id="debug-section">
+            <h2 class="section-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="debug-section-body"
+                title="Diagnostics: live log and data relay settings">
+                <span>Debug</span>
+                <svg class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </h2>
+            <div class="section-body" id="debug-section-body">
             <button id="debug-toggle-btn" title="Live error/fetch log, kept only in this browser tab">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1229,6 +1318,7 @@
                 </div>
                 <div id="relay-status" class="relay-status"></div>
             </div>
+            </div>
         </div>
 
         <!-- Donate Section -->
@@ -1236,6 +1326,26 @@
             <button id="donate-btn">Donate</button>
         </div>
     </div>
+    <!-- Sync dialog: carries the whole dashboard as a copyable code -->
+    <div id="sync-overlay">
+        <div id="sync-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+            <h3 id="sync-title">Sync to another computer</h3>
+            <p>This code contains your whole dashboard &mdash; bubbles, positions, sizes,
+               theme and background. Copy it, then paste it into this same box on the other
+               computer and press Load. Nothing is uploaded anywhere; the code <em>is</em>
+               your configuration.</p>
+            <textarea id="sync-code-box" spellcheck="false" autocapitalize="off" autocorrect="off"
+                      placeholder="Press Generate to create a code, or paste one here and press Load."></textarea>
+            <div class="sync-row">
+                <button id="sync-generate-btn">Generate</button>
+                <button id="sync-copy-btn">Copy</button>
+                <button id="sync-load-btn">Load</button>
+                <button id="sync-close-btn">Close</button>
+            </div>
+            <div id="sync-status"></div>
+        </div>
+    </div>
+
     <!-- NEW: Sidebar Overlay -->
     <div id="sidebar-overlay"></div>
 
@@ -1332,6 +1442,7 @@
         const zipInput = document.getElementById('zip-input');
         const stockInput = document.getElementById('stock-input');
         const newsTopicSelect = document.getElementById('news-topic-select');
+        const youtubeInput = document.getElementById('youtube-input');
         const redditInput = document.getElementById('reddit-input');
         const cryptoInput = document.getElementById('crypto-input');
         const quoteSelect = document.getElementById('quote-select');
@@ -1594,7 +1705,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0348';
+        const BUILD_ID = '2026-09-21-0358';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2273,6 +2384,7 @@
             // Set initial size from saved data, or apply defaults
             let defaultHeight = BUBBLE_DEFAULT_HEIGHT;
             if (data.type === 'news' || data.type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
+            if (data.type === 'youtube') defaultHeight = Math.round(BUBBLE_DEFAULT_WIDTH * 9 / 16) + 56;
             if (data.type === 'todo') defaultHeight = BUBBLE_TODO_HEIGHT;
 
             bubble.style.width = `${data.width || BUBBLE_DEFAULT_WIDTH}px`;
@@ -2674,6 +2786,69 @@
             });
         }
         
+        // Accepts the forms people actually paste: watch?v=, youtu.be/,
+        // /embed/, /shorts/, a playlist link, or a bare 11-character ID.
+        function parseYouTubeUrl(input) {
+            if (!input) return null;
+            const bare = input.trim();
+            if (/^[A-Za-z0-9_-]{11}$/.test(bare)) return { videoId: bare };
+
+            let url;
+            try {
+                url = new URL(bare.startsWith('http') ? bare : `https://${bare}`);
+            } catch { return null; }
+            if (!/(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/.test(url.hostname)) return null;
+
+            const out = {};
+            const list = url.searchParams.get('list');
+            if (list && /^[A-Za-z0-9_-]+$/.test(list)) out.playlistId = list;
+
+            let id = '';
+            if (url.hostname.endsWith('youtu.be')) {
+                id = url.pathname.slice(1);
+            } else if (url.pathname.startsWith('/embed/') || url.pathname.startsWith('/shorts/') || url.pathname.startsWith('/live/')) {
+                id = url.pathname.split('/')[2] || '';
+            } else {
+                id = url.searchParams.get('v') || '';
+            }
+            if (/^[A-Za-z0-9_-]{11}$/.test(id)) out.videoId = id;
+
+            // "?t=90", "?t=1m30s" and "&start=90" all appear in shared links.
+            const t = url.searchParams.get('t') || url.searchParams.get('start') || '';
+            const hms = t.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+            if (/^\d+$/.test(t)) out.startAt = parseInt(t, 10);
+            else if (hms && (hms[1] || hms[2] || hms[3])) {
+                out.startAt = (+(hms[1] || 0)) * 3600 + (+(hms[2] || 0)) * 60 + (+(hms[3] || 0));
+            }
+
+            return (out.videoId || out.playlistId) ? out : null;
+        }
+
+        function buildYouTubeBubble(contentWrapper, data) {
+            const params = new URLSearchParams({ rel: '0', modestbranding: '1', playsinline: '1' });
+            if (data.startAt) params.set('start', String(data.startAt));
+
+            let src;
+            if (data.videoId) {
+                if (data.playlistId) params.set('list', data.playlistId);
+                src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(data.videoId)}?${params}`;
+            } else {
+                params.set('list', data.playlistId);
+                params.set('listType', 'playlist');
+                src = `https://www.youtube-nocookie.com/embed/videoseries?${params}`;
+            }
+
+            // youtube-nocookie.com so watching from the dashboard doesn't feed
+            // the tracking cookies a normal embed would set.
+            contentWrapper.innerHTML = `
+                <div class="bubble-content-view youtube-view">
+                    <iframe src="${src}" title="YouTube player" loading="lazy"
+                            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                            referrerpolicy="strict-origin-when-cross-origin"
+                            allowfullscreen></iframe>
+                </div>`;
+        }
+
         function buildCalculatorBubble(contentWrapper) {
             contentWrapper.innerHTML = `
                 <div class="bubble-content-view p-2">
@@ -2952,6 +3127,16 @@
                             stockInput.value = '';
                         }
                         break;
+                    case 'youtube':
+                        {
+                            const parsed = parseYouTubeUrl(youtubeInput.value.trim());
+                            if (!parsed) throw new Error("Paste a YouTube video or playlist link.");
+                            data.videoId = parsed.videoId || '';
+                            data.playlistId = parsed.playlistId || '';
+                            data.startAt = parsed.startAt || 0;
+                            youtubeInput.value = '';
+                        }
+                        break;
                     case 'news':
                         data.topic = newsTopicSelect.value;
                         break;
@@ -3080,6 +3265,11 @@
              let defaultHeight = BUBBLE_DEFAULT_HEIGHT;
              if (type === 'news' || type === 'reddit') defaultHeight = BUBBLE_NEWS_HEIGHT;
              if (type === 'todo') defaultHeight = BUBBLE_TODO_HEIGHT;
+             // 16:9 plus the header, so a video doesn't open letterboxed.
+             // This is the block that actually decides the size -- it writes
+             // data.height, which then wins over buildBubbleShell's own
+             // default.
+             if (type === 'youtube') defaultHeight = Math.round(BUBBLE_DEFAULT_WIDTH * 9 / 16) + 56;
              
              // Apply size. On mobile, always use the current responsive
              // default and ignore any saved/legacy width -- a bubble saved
@@ -3141,6 +3331,7 @@
                     case 'countdown': buildCountdownBubble(bubble, contentWrapper, data); break;
                     case 'timer': buildTimerBubble(bubble, contentWrapper, data); break;
                     case 'note': buildNoteBubble(contentWrapper, data); break;
+                    case 'youtube': buildYouTubeBubble(contentWrapper, data); break;
                     case 'calculator': buildCalculatorBubble(contentWrapper); break;
                     case 'image': buildImageBubble(contentWrapper, data); break;
                     case 'todo': buildTodoBubble(contentWrapper, data); break; // NEW
@@ -3738,6 +3929,223 @@
             if (document.visibilityState === 'hidden') {
                 try { saveBubblesState(); } catch { }
             }
+        });
+
+        // Custom colours. Backgrounds were limited to a fixed preset list
+        // plus a pasted image URL, so there was no way to just pick a colour
+        // -- and picked colours can't rot the way a third-party image can.
+        const bgColorA = document.getElementById('bg-color-a');
+        const bgColorB = document.getElementById('bg-color-b');
+        document.getElementById('bg-color-apply').addEventListener('click', () => {
+            setBackground(`linear-gradient(160deg, ${bgColorA.value} 0%, ${bgColorB.value} 100%)`);
+            customBgSelect.value = '';
+            customBgInput.value = '';
+        });
+        document.getElementById('bg-color-solid').addEventListener('click', () => {
+            // A gradient between one colour and itself, so the whole
+            // background path keeps handling a single CSS value.
+            setBackground(`linear-gradient(0deg, ${bgColorA.value} 0%, ${bgColorA.value} 100%)`);
+            customBgSelect.value = '';
+            customBgInput.value = '';
+        });
+
+        // --- Sync code: the whole dashboard as a copyable string ---
+        //
+        // Self-contained by design. The code IS the configuration, so there
+        // is no server, no account and no stored credential -- nothing
+        // leaves this machine unless the user pastes the code somewhere
+        // themselves. localStorage never syncs between browsers (browser
+        // sync covers bookmarks and passwords, not site storage), so moving
+        // state between machines has to be explicit either way.
+        const SYNC_KEYS = [
+            'dashboardBubbles', 'dashboardBackground', 'dashboardTheme',
+            'scrollBarSide', 'relayUrl', 'dashboardZoom', 'dashboardGravity',
+            'dashboardFloatSpeed',
+        ];
+        const SYNC_PREFIX = 'WB1:';
+
+        const syncOverlay = document.getElementById('sync-overlay');
+        const syncCodeBox = document.getElementById('sync-code-box');
+        const syncStatus = document.getElementById('sync-status');
+
+        function setSyncStatus(kind, text) {
+            syncStatus.className = kind;
+            syncStatus.textContent = text;
+        }
+
+        function bytesToBase64(bytes) {
+            let bin = '';
+            // Chunked: spreading a large array into String.fromCharCode
+            // blows the argument limit on big layouts.
+            const CHUNK = 0x8000;
+            for (let i = 0; i < bytes.length; i += CHUNK) {
+                bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+            }
+            return btoa(bin);
+        }
+        function base64ToBytes(b64) {
+            const bin = atob(b64);
+            const out = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+
+        async function generateSyncCode() {
+            // Capture where the bubbles actually are right now, not wherever
+            // they were at the last save.
+            if (!isMobileViewport) syncPositionsIntoData();
+            saveBubblesState();
+
+            const payload = {};
+            for (const key of SYNC_KEYS) {
+                const v = localStorage.getItem(key);
+                if (v !== null) payload[key] = v;
+            }
+            const json = JSON.stringify({ v: 1, build: BUILD_ID, saved: new Date().toISOString(), data: payload });
+
+            let bytes = new TextEncoder().encode(json);
+            let compressed = false;
+            // A full dashboard is several KB of JSON and compresses hard.
+            // CompressionStream isn't everywhere, so this is optional.
+            if (typeof CompressionStream === 'function') {
+                try {
+                    const cs = new CompressionStream('gzip');
+                    const stream = new Blob([bytes]).stream().pipeThrough(cs);
+                    bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+                    compressed = true;
+                } catch (e) {
+                    debugLog('warn', `[Sync] compression unavailable, using raw: ${e.message}`);
+                }
+            }
+            const code = SYNC_PREFIX + (compressed ? 'z' : 'r') + ':' + bytesToBase64(bytes);
+            debugLog('info', `[Sync] generated ${code.length} chars from ${json.length} bytes of state (compressed: ${compressed})`);
+            return code;
+        }
+
+        async function applySyncCode(raw) {
+            const code = (raw || '').trim().replace(/\s+/g, '');
+            if (!code) throw new Error('Paste a code first.');
+            if (!code.startsWith(SYNC_PREFIX)) {
+                throw new Error('That doesn\'t look like a WeatherBubb code -- they start with "WB1:".');
+            }
+            const body = code.slice(SYNC_PREFIX.length);
+            const mode = body[0];
+            if (mode !== 'z' && mode !== 'r') throw new Error('Unrecognised code format.');
+
+            let bytes;
+            try {
+                bytes = base64ToBytes(body.slice(2));
+            } catch {
+                throw new Error('The code is damaged -- it may have been cut short when copied.');
+            }
+
+            if (mode === 'z') {
+                if (typeof DecompressionStream !== 'function') {
+                    throw new Error('This browser can\'t read compressed codes. Generate one here and it\'ll use the plain format.');
+                }
+                const ds = new DecompressionStream('gzip');
+                const stream = new Blob([bytes]).stream().pipeThrough(ds);
+                bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+            }
+
+            let parsed;
+            try {
+                parsed = JSON.parse(new TextDecoder().decode(bytes));
+            } catch {
+                throw new Error('The code is damaged -- it didn\'t decode to a valid configuration.');
+            }
+            if (!parsed || !parsed.data || typeof parsed.data !== 'object') {
+                throw new Error('That code has no configuration in it.');
+            }
+
+            // Only ever write the keys this app owns. A code is pasted from
+            // elsewhere, so it does not get to set arbitrary storage.
+            let applied = 0;
+            for (const key of SYNC_KEYS) {
+                if (typeof parsed.data[key] === 'string') {
+                    localStorage.setItem(key, parsed.data[key]);
+                    applied++;
+                }
+            }
+            debugLog('info', `[Sync] applied ${applied} setting(s) from a code saved ${parsed.saved || 'at an unknown time'} on build ${parsed.build || '?'}`);
+            return { applied, saved: parsed.saved };
+        }
+
+        function openSyncDialog() {
+            syncOverlay.classList.add('visible');
+            setSyncStatus('', '');
+            syncCodeBox.value = '';
+        }
+        function closeSyncDialog() { syncOverlay.classList.remove('visible'); }
+
+        document.getElementById('sync-code-btn').addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('visible');
+            openSyncDialog();
+        });
+        document.getElementById('sync-close-btn').addEventListener('click', closeSyncDialog);
+        syncOverlay.addEventListener('click', (e) => { if (e.target === syncOverlay) closeSyncDialog(); });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && syncOverlay.classList.contains('visible')) closeSyncDialog();
+        });
+
+        document.getElementById('sync-generate-btn').addEventListener('click', async () => {
+            try {
+                setSyncStatus('', 'Generating...');
+                syncCodeBox.value = await generateSyncCode();
+                syncCodeBox.select();
+                setSyncStatus('ok', `Code ready (${syncCodeBox.value.length} characters). Copy it and paste it on the other computer.`);
+            } catch (e) {
+                setSyncStatus('bad', `Couldn't generate a code: ${e.message}`);
+                debugLog('error', `[Sync] generate failed: ${e.message}`);
+            }
+        });
+
+        document.getElementById('sync-copy-btn').addEventListener('click', async () => {
+            if (!syncCodeBox.value.trim()) { setSyncStatus('bad', 'Nothing to copy -- press Generate first.'); return; }
+            try {
+                await navigator.clipboard.writeText(syncCodeBox.value);
+                setSyncStatus('ok', 'Copied to the clipboard.');
+            } catch {
+                // Clipboard access is refused in plenty of contexts; selecting
+                // the text still lets the user copy it by hand.
+                syncCodeBox.select();
+                setSyncStatus('bad', 'This browser blocked clipboard access -- the code is selected, press Ctrl+C.');
+            }
+        });
+
+        document.getElementById('sync-load-btn').addEventListener('click', async () => {
+            try {
+                setSyncStatus('', 'Loading...');
+                const { applied, saved } = await applySyncCode(syncCodeBox.value);
+                setSyncStatus('ok', `Restored ${applied} setting(s)${saved ? ` from ${new Date(saved).toLocaleString()}` : ''}. Reloading...`);
+                setTimeout(() => window.location.reload(), 900);
+            } catch (e) {
+                setSyncStatus('bad', e.message);
+                debugLog('error', `[Sync] load failed: ${e.message}`);
+            }
+        });
+
+        // --- Collapsible sidebar sections ---
+        document.querySelectorAll('.sidebar-section.collapsible .section-toggle').forEach(toggle => {
+            const section = toggle.closest('.sidebar-section');
+            const id = section.id;
+            const apply = (collapsed) => {
+                section.classList.toggle('collapsed', collapsed);
+                toggle.setAttribute('aria-expanded', String(!collapsed));
+                try { localStorage.setItem(`section:${id}:collapsed`, collapsed ? '1' : '0'); } catch { }
+            };
+            let stored = null;
+            try { stored = localStorage.getItem(`section:${id}:collapsed`); } catch { }
+            // Debug stays collapsed until asked for -- it's diagnostics, not
+            // something to scroll past on every visit.
+            apply(stored === null ? true : stored === '1');
+
+            const activate = () => apply(!section.classList.contains('collapsed'));
+            toggle.addEventListener('click', activate);
+            toggle.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+            });
         });
 
         // --- Data relay settings + self-test ---
