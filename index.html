@@ -1490,6 +1490,22 @@
         // need one, so there's nothing secret in that URL.
         const CUSTOM_PROXY_URL = 'https://weatherbubb-proxy.ethamdavis89.workers.dev';
 
+        // Hosts we know don't send Access-Control-Allow-Origin, so a direct
+        // browser fetch can only ever fail. Mirrors the worker's own
+        // allowlist in worker/weatherbubb-proxy.js -- if you add a host
+        // there and it needs a relay, add it here too.
+        const RELAY_REQUIRED_HOSTS = new Set([
+            'query1.finance.yahoo.com',
+            'query2.finance.yahoo.com',
+            'zenquotes.io',
+            'news.google.com',
+        ]);
+
+        function hostnameOf(url) {
+            try { return new URL(url, window.location.href).hostname; }
+            catch { return ''; }
+        }
+
         async function fetchViaProxy(targetUrl, label = 'fetch') {
             // Trimmed based on real debug-log data from the live site:
             // corsproxy.io now 401s on every request (it started requiring
@@ -1501,22 +1517,26 @@
             // time: by the time a request reached the one proxy that
             // actually works (allorigins), it had already burned 15-25+
             // seconds on three guaranteed failures.
-            const proxyBuilders = [
-                // Try the target directly first, no proxy at all -- costs
-                // nothing extra when it (predictably) fails on CORS, and
-                // costs nothing to maintain if that target ever adds CORS
-                // support later.
-                { name: 'direct', build: (u) => u },
-                // Our own worker, when configured. First in line after
-                // direct because it's the only relay we control.
-                ...(CUSTOM_PROXY_URL
-                    ? [{ name: 'worker', build: (u) => `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(u)}` }]
-                    : []),
-                // Kept as a last-ditch fallback only. Currently failing
-                // 100% of the time from at least one real device, so it is
-                // not something to rely on.
-                { name: 'allorigins', build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` },
-            ];
+            const direct = { name: 'direct', build: (u) => u };
+            const worker = CUSTOM_PROXY_URL
+                ? { name: 'worker', build: (u) => `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(u)}` }
+                : null;
+            // Kept as a last-ditch fallback only. Currently failing 100% of
+            // the time from at least one real device, so it is not
+            // something to rely on.
+            const allorigins = { name: 'allorigins', build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` };
+
+            // For hosts that have never sent CORS headers, a direct attempt
+            // isn't a cheap optimistic try -- it's a guaranteed failure that
+            // throws a CORS violation into the console on every single
+            // fetch, which is noise in exactly the debug log used to
+            // diagnose real problems. Go to the relay first for those, and
+            // still keep direct in the chain (behind the relay) so the app
+            // self-heals for free if a host ever does add CORS support.
+            const relayFirst = RELAY_REQUIRED_HOSTS.has(hostnameOf(targetUrl));
+            const proxyBuilders = (relayFirst && worker
+                ? [worker, direct, allorigins]
+                : [direct, ...(worker ? [worker] : []), allorigins]);
             let lastError;
             for (const proxy of proxyBuilders) {
                 const startedAt = performance.now();
