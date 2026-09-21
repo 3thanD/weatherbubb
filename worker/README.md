@@ -33,25 +33,41 @@ Free tier covers 100,000 requests/day. With the 60-second edge cache in
 7. Send that URL over and it gets wired into the app (one line —
    `CUSTOM_PROXY_URL` at the top of the script in `index.html`).
 
-## If Cloudflare's dashboard fights you: Deno Deploy instead
+## A Worker with no source file (this actually happened)
 
-Cloudflare's newer "create a Worker" flows can produce a project that
-serves **static assets** rather than running your script. The signature is
-unmistakable and worth recognising, because every symptom points away
-from the real cause:
+A Worker can exist, show a green Production route and a correct
+`workers.dev` URL, and still have **no script**. Creating the Worker and
+deploying its code are separate steps, and the first succeeding says
+nothing about the second.
 
-- the worker URL's root returns an HTML page, so the browser rejects it
-  for having no CORS headers and reports a bare `Failed to fetch`
-- `/health` (or any other path) returns a **404 page**
+What it looks like from outside, and why it misleads:
 
-A tab navigation isn't subject to CORS, so anything the script returned
-would be *displayed* in the tab. A 404 page there proves the script never
-ran. Check **Edit code**: if there's a `public/` or `assets/` folder
-beside the script, that's the cause. Delete the folder and redeploy, or
-recreate the Worker choosing **Worker only** rather than Worker + Assets.
+- the worker URL returns responses with no CORS headers, so the browser
+  discards them and reports a bare `Failed to fetch` with no status
+- every path, including `/health`, returns a **404 page**
+- the dashboard's Domains tab looks entirely healthy
 
-If that's more fight than it's worth, `weatherbubb-proxy.js` runs
-unmodified on Deno Deploy, which has no assets layer to get in the way:
+That reads as a broken relay, a wrong URL, or a CORS misconfiguration.
+It is none of them. The check that settles it: open the worker URL in a
+browser tab. **A tab navigation is not subject to CORS**, so whatever the
+script returned would be displayed. A 404 page there proves no script
+ran at all.
+
+Confirm it in **Edit code**. If the file tree shows the entrypoint marked
+with an error and opening it says *"the file was not found"*, the Worker
+is empty -- the config names an entrypoint that doesn't exist. Use
+**Create File** to create it with that exact name, paste
+`weatherbubb-proxy.js` into it, and **Deploy**. If Cloudflare then
+complains about the module type, the file needs a `.js` extension, which
+is easiest to get by deleting the Worker and recreating it from the
+Hello World template (**Worker only**, not Worker + Assets) before
+replacing the code.
+
+## Or skip Cloudflare: Deno Deploy
+
+`weatherbubb-proxy.js` runs unmodified on Deno Deploy, where the code
+*is* the deployment -- there's no separate entrypoint to point at and no
+assets layer, so it can't land in the state above:
 
 1. Go to **https://dash.deno.com** and sign in with GitHub.
 2. **New Playground**.
@@ -68,6 +84,10 @@ The one Cloudflare-specific line is the `cf: { cacheTtl }` fetch option,
 and other runtimes ignore an unrecognised property. Losing it costs the
 60-second edge cache and nothing else. Add the new origin to
 `ALLOWED_ORIGINS` the same way regardless of where it runs.
+
+Whichever host you use, the relay URL is editable in the app itself
+(sidebar → **Debug** → **Data relay URL**), so pointing the site at a new
+relay takes a paste and a click rather than a site redeploy.
 
 ## If the bubbles still don't load
 
