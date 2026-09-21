@@ -3153,13 +3153,29 @@
             // 5. Create physics body
             const width = data.width;
             const height = data.height;
-            // Spawn lower down & check bounds
             const spawnPadding = 30; // Min distance from edges/top
-            let x = Math.max(width/2 + spawnPadding, Math.min(contentWidth - width/2 - spawnPadding, contentWidth / 2 + (Math.random() * 50 - 25)));
-             // FIX: Calculate top boundary based on current menu state's padding
-             const topBoundaryPadding = parseFloat(bubbleContainer.style.paddingTop) || 0; 
-             let yTopBoundary = topBoundaryPadding + height / 2 + spawnPadding;
-             let y = Math.max(yTopBoundary, topBoundaryPadding + 50 + (Math.random() * 50 - 25)); // Ensure below menu or top padding
+            const topBoundaryPadding = parseFloat(bubbleContainer.style.paddingTop) || 0;
+            const yTopBoundary = topBoundaryPadding + height / 2 + spawnPadding;
+
+            let x, y;
+            if (typeof data.x === 'number' && typeof data.y === 'number') {
+                // Restore where it was left. Clamped, because the window may
+                // be smaller than it was when this layout was saved, and an
+                // off-screen bubble is indistinguishable from a lost one.
+                x = data.x;
+                y = data.y;
+            } else {
+                // No saved position: older layouts, and every freshly added
+                // bubble. Cascade down-right from the top-left by how many
+                // bubbles already exist, so several in a row don't land on
+                // top of each other the way a fixed point made them.
+                const index = bubbleMap.size;
+                const step = 36;
+                x = width / 2 + spawnPadding + (index * step) % Math.max(1, contentWidth - width - spawnPadding * 2);
+                y = yTopBoundary + (index * step) % 220;
+            }
+            x = Math.max(width / 2 + spawnPadding, Math.min(contentWidth - width / 2 - spawnPadding, x));
+            y = Math.max(yTopBoundary, Math.min(Math.max(yTopBoundary, contentHeight - height / 2 - spawnPadding), y));
 
 
             const body = Bodies.rectangle(x, y, width, height, {
@@ -3244,8 +3260,30 @@
 
         // --- Save/Load State ---
         
+        // Copy each bubble's live physics position into its saved data.
+        // Without this, position was simply never persisted: every bubble
+        // respawned at the same centre-top point, so a reload stacked the
+        // whole layout in one place and only physics pulled it apart --
+        // and locked bubbles never moved at all.
+        function syncPositionsIntoData() {
+            for (const [bubble, bodyId] of reverseBubbleMap.entries()) {
+                const body = Composite.get(matterWorld, bodyId, 'body');
+                if (!body || !bubble.dataset.bubbleData) continue;
+                try {
+                    const d = JSON.parse(bubble.dataset.bubbleData);
+                    d.x = Math.round(body.position.x);
+                    d.y = Math.round(body.position.y);
+                    bubble.dataset.bubbleData = JSON.stringify(d);
+                } catch { /* leave this bubble's data alone */ }
+            }
+        }
+
         function saveBubblesState() {
             if (isLoadingState) return;
+            // Mobile lays bubbles out by document flow and neutralizes the
+            // physics transform, so positions there are meaningless and
+            // would overwrite a good desktop layout with junk.
+            if (!isMobileViewport) syncPositionsIntoData();
             const bubblesData = [];
             document.querySelectorAll('.bubble').forEach(bubble => {
                 if (bubble.dataset.bubbleData) {
@@ -3322,7 +3360,7 @@
             const storedBg = localStorage.getItem('dashboardBackground');
             const savedBg = storedBg === null ? DEFAULT_BACKGROUND : storedBg;
             if (savedBg && savedBg !== 'none') {
-                document.body.style.backgroundImage = `url(${savedBg})`;
+                document.body.style.backgroundImage = `url("${savedBg}")`;
                 customBgSelect.value = savedBg;          // highlight it if it's a preset
                 customBgInput.value = customBgSelect.value === savedBg ? '' : savedBg;
             } else {
@@ -3662,6 +3700,23 @@
             }
         }
 
+        // Bubbles drift continuously, so the position saved by any earlier
+        // event is stale the moment it's written. Capture where they
+        // actually are as the page goes away -- that's the arrangement the
+        // user last saw and expects to find on their next visit.
+        // pagehide rather than beforeunload: beforeunload is unreliable on
+        // mobile, where tabs are frozen and discarded rather than unloaded.
+        window.addEventListener('pagehide', () => {
+            try { saveBubblesState(); } catch { /* nothing useful to do while unloading */ }
+        });
+        document.addEventListener('visibilitychange', () => {
+            // Covers the tab being backgrounded and then discarded, which
+            // can skip pagehide entirely.
+            if (document.visibilityState === 'hidden') {
+                try { saveBubblesState(); } catch { }
+            }
+        });
+
         // --- Data relay settings + self-test ---
         const relayUrlInput = document.getElementById('relay-url-input');
         const relayTestBtn = document.getElementById('relay-test-btn');
@@ -3873,18 +3928,47 @@
         arrangeBubblesBtn.addEventListener('click', arrangeBubbles);
 
          // NEW: Set Background Logic
+         // Loads the image before committing to it. CSS background-image
+         // fails silently: a dead URL leaves whatever was there, so
+         // "nothing happened" is the only feedback, and the broken URL
+         // still gets saved and re-applied on every future load. Presets
+         // point at third-party images that can disappear without notice,
+         // so this needs to be visible and non-destructive.
          function setBackground(url) {
-             if (url) {
-                document.body.style.backgroundImage = `url(${url})`;
-                localStorage.setItem('dashboardBackground', url); // Save background
-                showNotification("Background Set!", "success");
-             } else {
+             if (!url) {
                  document.body.style.backgroundImage = 'none';
                  // Stored, not removed -- an absent key means "first visit"
                  // and would re-apply the default on the next load.
                  localStorage.setItem('dashboardBackground', 'none');
                  showNotification("Background Cleared", "info");
+                 return;
              }
+
+             const probe = new Image();
+             const startedAt = performance.now();
+             let settled = false;
+             const finish = (ok, why) => {
+                 if (settled) return;
+                 settled = true;
+                 const ms = Math.round(performance.now() - startedAt);
+                 if (ok) {
+                     document.body.style.backgroundImage = `url("${url}")`;
+                     localStorage.setItem('dashboardBackground', url);
+                     debugLog('info', `[Background] loaded in ${ms}ms -- ${url.slice(0, 80)}`);
+                     showNotification("Background Set!", "success");
+                 } else {
+                     // Deliberately not saved: a URL that can't load shouldn't
+                     // be restored on the next visit, and the current
+                     // background stays rather than blanking the page.
+                     debugLog('error', `[Background] ${why} after ${ms}ms -- ${url}`);
+                     showNotification(`That image wouldn't load (${why}). Background unchanged.`, "error");
+                 }
+             };
+             probe.onload = () => finish(true);
+             probe.onerror = () => finish(false, 'failed to load');
+             // Some dead hosts neither resolve nor error promptly.
+             setTimeout(() => finish(false, 'timed out'), 10000);
+             probe.src = url;
          }
          // Listen to button
          setBgBtn.addEventListener('click', () => {
