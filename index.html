@@ -945,6 +945,38 @@
         }
         .color-row button { flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; }
 
+        .merge-btn { pointer-events: auto; cursor: grab; touch-action: none; }
+        .merge-btn svg { width: 1rem; height: 1rem; }
+        .merge-btn.dragging { cursor: grabbing; }
+        .bubble.merge-target {
+            outline: 2px dashed var(--wb-accent-solid);
+            outline-offset: 3px;
+        }
+        #merge-line {
+            position: fixed; height: 2px; transform-origin: 0 50%;
+            background: var(--wb-accent-solid); opacity: 0.85;
+            pointer-events: none; z-index: 1150; border-radius: 2px;
+        }
+
+        /* A merged bubble: one row per member, each scrollable if it needs to be. */
+        .group-view { display: flex; flex-direction: column; height: 100%; overflow-y: auto; gap: 1px; }
+        .group-row { position: relative; border-bottom: 1px solid rgba(255,255,255,0.12); }
+        .group-row:last-child { border-bottom: 0; }
+        .group-row .bubble-content-view { padding: 0.35rem 0.5rem; }
+        /* Compact the reused builders: they're written for a whole bubble. */
+        .group-row .bubble-content-view h3 { font-size: 0.8rem; margin-bottom: 0; }
+        .group-row .bubble-content-view .text-4xl,
+        .group-row .bubble-content-view .text-5xl { font-size: 1.35rem; line-height: 1.6rem; }
+        .group-row .bubble-content-view .text-3xl { font-size: 1.15rem; }
+        .group-row .bubble-content-view img,
+        .group-row .bubble-content-view svg.weather-icon { max-height: 36px; }
+        .group-row .split-btn {
+            position: absolute; top: 2px; right: 4px;
+            font-size: 0.85rem; line-height: 1; opacity: 0.45;
+            background: none; border: 0; color: inherit; cursor: pointer; padding: 2px 4px;
+        }
+        .group-row .split-btn:hover { opacity: 1; }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1705,7 +1737,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0358';
+        const BUILD_ID = '2026-09-21-0403';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2400,6 +2432,11 @@
                         <span>Lock</span>
                     </label>
                     <div class="header-buttons">
+                         <button class="merge-btn" title="Drag onto another bubble to combine them">
+                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                 <circle cx="9" cy="12" r="6" /><circle cx="15" cy="12" r="6" />
+                             </svg>
+                         </button>
                          <!-- NEW: Sleep/Wake Button -->
                          <button class="sleep-wake-btn" title="${data.isSleeping ? 'Wake Bubble' : 'Sleep Bubble'}">
                              ${data.isSleeping ? 
@@ -3212,6 +3249,254 @@
             }
         }
         
+        // The per-type content switch, lifted out of createAndDisplayBubble
+        // so a merged bubble can call it once per member. Members then use
+        // exactly the same builders as standalone bubbles, which is what
+        // keeps a merged row from drifting away from its full-size version.
+        function renderBubbleContent(bubble, contentWrapper, type, apiData, data) {
+             // Handle potential API errors passed via apiData
+             if (apiData && apiData.error) {
+                 contentWrapper.innerHTML = `<div class="bubble-content-view text-red-400">Error: ${apiData.message}</div>`;
+                 return;
+             }
+             switch (type) {
+                case 'weather': buildWeatherBubble(contentWrapper, apiData); break;
+                case 'stock': buildStockBubble(contentWrapper, apiData); break;
+                case 'news': buildNewsBubble(contentWrapper, apiData); break;
+                case 'reddit': buildRedditBubble(contentWrapper, apiData, data); break;
+                case 'crypto': buildCryptoBubble(contentWrapper, apiData, data); break;
+                case 'quote': buildQuoteBubble(contentWrapper, apiData); break;
+                case 'digitalClock': buildDigitalClockBubble(bubble, contentWrapper, data); break;
+                case 'analogClock': buildAnalogClockBubble(bubble, contentWrapper); break;
+                case 'countdown': buildCountdownBubble(bubble, contentWrapper, data); break;
+                case 'timer': buildTimerBubble(bubble, contentWrapper, data); break;
+                case 'note': buildNoteBubble(contentWrapper, data); break;
+                case 'youtube': buildYouTubeBubble(contentWrapper, data); break;
+                case 'calculator': buildCalculatorBubble(contentWrapper); break;
+                case 'image': buildImageBubble(contentWrapper, data); break;
+                case 'todo': buildTodoBubble(contentWrapper, data); break;
+                case 'worldClock': buildWorldClockBubble(bubble, contentWrapper, data); break;
+                case 'joke': buildJokeBubble(bubble, contentWrapper, data); break;
+                case 'group': buildGroupBubble(bubble, contentWrapper, data); break;
+            }
+        }
+
+        // --- Drag-to-merge ---
+        // Press the two-circles handle and drag onto another bubble to
+        // combine them. A line follows the cursor and the bubble under it is
+        // outlined, so the target is never ambiguous.
+        let mergeDrag = null;
+
+        function bubbleUnderPoint(x, y, exclude) {
+            // elementFromPoint alone is unreliable here: .bubble is
+            // pointer-events:none so the physics canvas can receive drags, so
+            // hit-test the rectangles directly. Reversed, because later
+            // bubbles paint on top.
+            const all = [...document.querySelectorAll('.bubble')].reverse();
+            for (const b of all) {
+                if (b === exclude) continue;
+                const r = b.getBoundingClientRect();
+                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return b;
+            }
+            return null;
+        }
+
+        function attachMergeHandle(bubble) {
+            const handle = bubble.querySelector('.merge-btn');
+            if (!handle) return;
+
+            handle.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();   // don't let Matter start dragging the body
+                const line = document.createElement('div');
+                line.id = 'merge-line';
+                document.body.appendChild(line);
+                const r = handle.getBoundingClientRect();
+                mergeDrag = { source: bubble, line, originX: r.left + r.width / 2, originY: r.top + r.height / 2, target: null };
+                handle.classList.add('dragging');
+                handle.setPointerCapture(e.pointerId);
+            });
+
+            handle.addEventListener('pointermove', (e) => {
+                if (!mergeDrag) return;
+                const dx = e.clientX - mergeDrag.originX;
+                const dy = e.clientY - mergeDrag.originY;
+                const len = Math.hypot(dx, dy);
+                const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+                Object.assign(mergeDrag.line.style, {
+                    left: `${mergeDrag.originX}px`, top: `${mergeDrag.originY}px`,
+                    width: `${len}px`, transform: `rotate(${ang}deg)`,
+                });
+                const over = bubbleUnderPoint(e.clientX, e.clientY, mergeDrag.source);
+                if (over !== mergeDrag.target) {
+                    if (mergeDrag.target) mergeDrag.target.classList.remove('merge-target');
+                    if (over) over.classList.add('merge-target');
+                    mergeDrag.target = over;
+                }
+            });
+
+            const finish = async (e) => {
+                if (!mergeDrag) return;
+                const { source, target, line } = mergeDrag;
+                line.remove();
+                if (target) target.classList.remove('merge-target');
+                handle.classList.remove('dragging');
+                mergeDrag = null;
+                if (target && target !== source) await mergeBubbles(source, target);
+            };
+            handle.addEventListener('pointerup', finish);
+            handle.addEventListener('pointercancel', finish);
+        }
+
+        // Merging is target-anchored: the result takes the target's place and
+        // size, so the dashboard doesn't rearrange itself around the drop.
+        async function mergeBubbles(source, target) {
+            let sourceData, targetData;
+            try {
+                sourceData = JSON.parse(source.dataset.bubbleData);
+                targetData = JSON.parse(target.dataset.bubbleData);
+            } catch {
+                showNotification("Couldn't read one of those bubbles.", 'error');
+                return;
+            }
+
+            // Flatten, so merging into an existing group adds to it rather
+            // than nesting groups inside groups.
+            const membersOf = (d) => (d.type === 'group' && Array.isArray(d.children)) ? d.children : [d];
+            const children = [...membersOf(targetData), ...membersOf(sourceData)]
+                .map(c => { const copy = { ...c }; delete copy.x; delete copy.y; delete copy.width; delete copy.height; return copy; });
+
+            const groupData = {
+                type: 'group',
+                children,
+                x: targetData.x,
+                y: targetData.y,
+                width: targetData.width,
+                // Give each member room rather than squeezing them into the
+                // target's old height.
+                height: Math.min(560, Math.max(targetData.height || BUBBLE_DEFAULT_HEIGHT, 70 * children.length + 46)),
+                isStatic: targetData.isStatic,
+            };
+
+            removeBubble(source);
+            removeBubble(target);
+            await createAndDisplayBubble('group', groupData);
+            saveBubblesState();
+            debugLog('info', `[Merge] combined into a group of ${children.length}`);
+            showNotification(`Merged ${children.length} bubbles.`, 'success');
+        }
+
+        // Teardown for a bubble, shared by the close button and by merging
+        // (which removes the originals once they've been absorbed). Skipping
+        // any one of these leaks an interval, a physics body or a map entry.
+        function removeBubble(bubble) {
+            if (!bubble) return;
+            if (bubble.intervalId) clearInterval(bubble.intervalId);
+            const bodyId = reverseBubbleMap.get(bubble);
+            if (bodyId !== undefined) {
+                const body = Composite.get(matterWorld, bodyId, 'body');
+                if (body) Composite.remove(matterWorld, body);
+                bubbleMap.delete(bodyId);
+            }
+            reverseBubbleMap.delete(bubble);
+            if (bubbleResizeObserver) bubbleResizeObserver.unobserve(bubble);
+            bubble.remove();
+        }
+
+        // Fetching for one bubble type, factored out so a merged bubble can
+        // reuse it per member instead of duplicating the dispatch.
+        async function fetchDataForType(type, data) {
+            switch (type) {
+                case 'weather': return await getWeatherData(data.zip);
+                case 'stock': return await getStockData(data.ticker);
+                case 'news': return await getNewsData(data.topic);
+                case 'reddit': return await getRedditData(data.subreddit);
+                case 'crypto': return await getCryptoData(data.coinId);
+                case 'quote': return await getQuoteData(data.tag);
+                default: return data;
+            }
+        }
+
+        // A merged bubble renders each member through that member's own
+        // builder, into its own row. Reusing the builders rather than
+        // writing compact variants means a merged stock row and a standalone
+        // stock bubble can't drift apart, and every type is mergeable for
+        // free; the rows are compacted with CSS instead.
+        async function buildGroupBubble(bubble, contentWrapper, data) {
+            const children = Array.isArray(data.children) ? data.children : [];
+            contentWrapper.innerHTML = '<div class="group-view"></div>';
+            const view = contentWrapper.querySelector('.group-view');
+
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                const row = document.createElement('div');
+                row.className = 'group-row';
+                row.dataset.childIndex = String(i);
+                view.appendChild(row);
+
+                let childApiData;
+                try {
+                    childApiData = await fetchDataForType(child.type, child);
+                } catch (err) {
+                    row.innerHTML = `<div class="bubble-content-view p-2"><p class="text-xs text-red-400">${child.type}: ${err.message}</p></div>`;
+                    debugLog('warn', `[Group] member ${child.type} failed: ${err.message}`);
+                    continue;
+                }
+                try {
+                    renderBubbleContent(bubble, row, child.type, childApiData, child);
+                } catch (err) {
+                    row.innerHTML = `<div class="bubble-content-view p-2"><p class="text-xs text-red-400">${child.type}: could not render</p></div>`;
+                    debugLog('error', `[Group] member ${child.type} render failed: ${err.message}`);
+                }
+
+                // Pull one member back out into its own bubble. Without this
+                // a merge is one-way, which makes it a trap rather than a
+                // tool.
+                const split = document.createElement('button');
+                split.className = 'split-btn';
+                split.title = 'Split this back into its own bubble';
+                split.textContent = '⤢';
+                split.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    splitFromGroup(bubble, i);
+                });
+                row.appendChild(split);
+            }
+
+            if (!children.length) {
+                view.innerHTML = '<div class="bubble-content-view p-2"><p class="text-xs opacity-70">Empty group.</p></div>';
+            }
+        }
+
+        async function splitFromGroup(groupBubble, index) {
+            let data;
+            try { data = JSON.parse(groupBubble.dataset.bubbleData); } catch { return; }
+            const children = Array.isArray(data.children) ? data.children : [];
+            if (index < 0 || index >= children.length) return;
+
+            const [removed] = children.splice(index, 1);
+            removed.x = undefined; removed.y = undefined;   // let it find a free spot
+            await createAndDisplayBubble(removed.type, removed);
+
+            if (children.length === 1) {
+                // A group of one is just a bubble wearing a costume, so
+                // collapse it back rather than leaving a pointless wrapper.
+                const last = children[0];
+                last.x = data.x; last.y = data.y;
+                removeBubble(groupBubble);
+                await createAndDisplayBubble(last.type, last);
+            } else if (children.length === 0) {
+                removeBubble(groupBubble);
+            } else {
+                data.children = children;
+                groupBubble.dataset.bubbleData = JSON.stringify(data);
+                const wrapper = groupBubble.querySelector('.bubble-content-wrapper');
+                await buildGroupBubble(groupBubble, wrapper, data);
+            }
+            saveBubblesState();
+            showNotification('Split out of the group.', 'success');
+        }
+
         async function createAndDisplayBubble(type, data, expectedGeneration = null) {
             let apiData;
 
@@ -3224,6 +3509,7 @@
                     case 'reddit': apiData = await getRedditData(data.subreddit); break;
                     case 'crypto': apiData = await getCryptoData(data.coinId); break;
                     case 'quote': apiData = await getQuoteData(data.tag); break;
+                    case 'group': apiData = data; break; // members fetch themselves
                     default: apiData = data; // For bubbles with no API
                 }
             } catch (error) {
@@ -3315,30 +3601,7 @@
             bubble.style.height = `${data.height}px`;
             
             // 4. Build the specific bubble content
-             // Handle potential API errors passed via apiData
-             if (apiData && apiData.error) {
-                 contentWrapper.innerHTML = `<div class="bubble-content-view text-red-400">Error: ${apiData.message}</div>`;
-             } else {
-                 switch (type) {
-                    case 'weather': buildWeatherBubble(contentWrapper, apiData); break;
-                    case 'stock': buildStockBubble(contentWrapper, apiData); break;
-                    case 'news': buildNewsBubble(contentWrapper, apiData); break;
-                    case 'reddit': buildRedditBubble(contentWrapper, apiData, data); break;
-                    case 'crypto': buildCryptoBubble(contentWrapper, apiData, data); break;
-                    case 'quote': buildQuoteBubble(contentWrapper, apiData); break;
-                    case 'digitalClock': buildDigitalClockBubble(bubble, contentWrapper, data); break;
-                    case 'analogClock': buildAnalogClockBubble(bubble, contentWrapper); break;
-                    case 'countdown': buildCountdownBubble(bubble, contentWrapper, data); break;
-                    case 'timer': buildTimerBubble(bubble, contentWrapper, data); break;
-                    case 'note': buildNoteBubble(contentWrapper, data); break;
-                    case 'youtube': buildYouTubeBubble(contentWrapper, data); break;
-                    case 'calculator': buildCalculatorBubble(contentWrapper); break;
-                    case 'image': buildImageBubble(contentWrapper, data); break;
-                    case 'todo': buildTodoBubble(contentWrapper, data); break; // NEW
-                    case 'worldClock': buildWorldClockBubble(bubble, contentWrapper, data); break; // NEW
-                    case 'joke': buildJokeBubble(bubble, contentWrapper, data); break;
-                }
-             }
+            renderBubbleContent(bubble, contentWrapper, type, apiData, data);
 
             
             // 5. Create physics body
@@ -3384,16 +3647,11 @@
             reverseBubbleMap.set(bubble, body.id);
             
             // 6. Add event listeners
+            attachMergeHandle(bubble);
+
             bubble.querySelector('.close-btn').addEventListener('click', () => {
-                // Clear any running intervals!
-                if (bubble.intervalId) clearInterval(bubble.intervalId);
-                
-                bubbleResizeObserver.unobserve(bubble); // Stop observing
-                bubble.remove(); 
-                bubbleMap.delete(body.id); 
-                reverseBubbleMap.delete(bubble);
-                Composite.remove(matterWorld, body); 
-                saveBubblesState(); 
+                removeBubble(bubble);
+                saveBubblesState();
             });
             
             bubble.querySelector('.toggle-lock').addEventListener('change', (e) => {
