@@ -151,6 +151,10 @@ export default {
         },
         redirect: 'follow',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        // The only Cloudflare-specific line in this file. Every other
+        // runtime ignores an unrecognised RequestInit property, so this
+        // file runs unmodified on Deno Deploy too -- see README. Losing
+        // it costs the edge cache, nothing else.
         cf: { cacheTtl: CACHE_SECONDS, cacheEverything: true },
       });
     } catch (err) {

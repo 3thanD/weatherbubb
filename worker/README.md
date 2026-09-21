@@ -33,6 +33,42 @@ Free tier covers 100,000 requests/day. With the 60-second edge cache in
 7. Send that URL over and it gets wired into the app (one line —
    `CUSTOM_PROXY_URL` at the top of the script in `index.html`).
 
+## If Cloudflare's dashboard fights you: Deno Deploy instead
+
+Cloudflare's newer "create a Worker" flows can produce a project that
+serves **static assets** rather than running your script. The signature is
+unmistakable and worth recognising, because every symptom points away
+from the real cause:
+
+- the worker URL's root returns an HTML page, so the browser rejects it
+  for having no CORS headers and reports a bare `Failed to fetch`
+- `/health` (or any other path) returns a **404 page**
+
+A tab navigation isn't subject to CORS, so anything the script returned
+would be *displayed* in the tab. A 404 page there proves the script never
+ran. Check **Edit code**: if there's a `public/` or `assets/` folder
+beside the script, that's the cause. Delete the folder and redeploy, or
+recreate the Worker choosing **Worker only** rather than Worker + Assets.
+
+If that's more fight than it's worth, `weatherbubb-proxy.js` runs
+unmodified on Deno Deploy, which has no assets layer to get in the way:
+
+1. Go to **https://dash.deno.com** and sign in with GitHub.
+2. **New Playground**.
+3. Delete the sample, paste the entire contents of
+   `weatherbubb-proxy.js`, and **Save & Deploy**.
+4. The URL shown is your relay, e.g.
+   `https://<name>.deno.dev`.
+5. Open `<that URL>/health` in a tab. JSON naming
+   `"worker": "weatherbubb-proxy"` means it's live.
+6. Paste the URL into the app: sidebar → **Debug** → **Data relay URL** →
+   **Test relay**. No site redeploy needed.
+
+The one Cloudflare-specific line is the `cf: { cacheTtl }` fetch option,
+and other runtimes ignore an unrecognised property. Losing it costs the
+60-second edge cache and nothing else. Add the new origin to
+`ALLOWED_ORIGINS` the same way regardless of where it runs.
+
 ## If the bubbles still don't load
 
 Open the in-app debug panel. Every relay refusal now reports its own
