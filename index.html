@@ -1594,7 +1594,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0341';
+        const BUILD_ID = '2026-09-21-0348';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -3360,7 +3360,7 @@
             const storedBg = localStorage.getItem('dashboardBackground');
             const savedBg = storedBg === null ? DEFAULT_BACKGROUND : storedBg;
             if (savedBg && savedBg !== 'none') {
-                document.body.style.backgroundImage = `url("${savedBg}")`;
+                document.body.style.backgroundImage = backgroundCssFor(savedBg);
                 customBgSelect.value = savedBg;          // highlight it if it's a preset
                 customBgInput.value = customBgSelect.value === savedBg ? '' : savedBg;
             } else {
@@ -3480,22 +3480,45 @@
         
          // --- NEW: Populate Background Select ---
          function populateBackgrounds() {
+             // Gradients first, and deliberately so. The photo presets below
+             // point at third-party images whose IDs have drifted from what
+             // they were named after -- "City Lights" is currently a beach
+             // chair, and "Pastel Sky" stopped resolving entirely. Nothing
+             // in this app controls those. Gradients are defined right here:
+             // they can't 404, can't be swapped out from under the name,
+             // load instantly, and work offline.
+             const gradients = {
+                 "Midnight": "linear-gradient(160deg, #0f172a 0%, #1e293b 55%, #334155 100%)",
+                 "Deep Space": "radial-gradient(ellipse at 20% 15%, #1e1b4b 0%, #0b0a1f 55%, #000000 100%)",
+                 "Ember": "linear-gradient(160deg, #1c1917 0%, #431407 55%, #7c2d12 100%)",
+                 "Bon Appel Gold": "linear-gradient(160deg, #09090b 0%, #292524 50%, #78350f 100%)",
+                 "Forest Dusk": "linear-gradient(170deg, #022c22 0%, #064e3b 50%, #0f172a 100%)",
+                 "Dusk Sky": "linear-gradient(180deg, #1e3a8a 0%, #7e22ce 55%, #f97316 100%)",
+                 "Pastel Sky": "linear-gradient(180deg, #a5b4fc 0%, #f0abfc 45%, #fecdd3 100%)",
+                 "Slate": "linear-gradient(160deg, #111827 0%, #374151 100%)",
+             };
+
              const presets = {
+                 "Night Sky": "https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Abstract Waves": "https://images.unsplash.com/photo-1554034483-04fda0d3507b?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Mountain Vista": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
-                 "Night Sky": "https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
-                 "City Lights": "https://images.unsplash.com/photo-1519125323398-675f0ddb6308?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
+                 "Beach Chair": "https://images.unsplash.com/photo-1519125323398-675f0ddb6308?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Ocean Blue": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Forest Path": "https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Geometric Dark": "https://images.unsplash.com/photo-1604147706283-d7119b5b822c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
-                 "Pastel Sky": "https://images.unsplash.com/photo-1568454537842-e13ae650a316?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Minimal Gray": "https://images.unsplash.com/photo-1533134486753-c833f0ed4866?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Space Nebula": "https://images.unsplash.com/photo-1464802686167-b939a6910659?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80"
              };
-             let optionsHTML = '<option value="">-- Preset BGs --</option>';
+             let optionsHTML = '<option value="">-- Backgrounds --</option>';
+             optionsHTML += '<optgroup label="Gradients (always available)">';
+             for (const name in gradients) {
+                 optionsHTML += `<option value="${gradients[name]}">${name}</option>`;
+             }
+             optionsHTML += '</optgroup><optgroup label="Photos (external, may change)">';
              for (const name in presets) {
                  optionsHTML += `<option value="${presets[name]}">${name}</option>`;
              }
+             optionsHTML += '</optgroup>';
              customBgSelect.innerHTML = optionsHTML;
          }
 
@@ -3934,6 +3957,16 @@
          // still gets saved and re-applied on every future load. Presets
          // point at third-party images that can disappear without notice,
          // so this needs to be visible and non-destructive.
+         // A gradient is CSS in its own right, not a URL: it can't be
+         // preloaded with an Image(), and wrapping it in url() would break
+         // it outright.
+         function isGradient(value) {
+             return /^(linear|radial|conic)-gradient\(/.test(String(value).trim());
+         }
+         function backgroundCssFor(value) {
+             return isGradient(value) ? value : `url("${value}")`;
+         }
+
          function setBackground(url) {
              if (!url) {
                  document.body.style.backgroundImage = 'none';
@@ -3941,6 +3974,14 @@
                  // and would re-apply the default on the next load.
                  localStorage.setItem('dashboardBackground', 'none');
                  showNotification("Background Cleared", "info");
+                 return;
+             }
+
+             if (isGradient(url)) {
+                 document.body.style.backgroundImage = url;
+                 localStorage.setItem('dashboardBackground', url);
+                 debugLog('info', `[Background] gradient applied -- ${url.slice(0, 60)}`);
+                 showNotification("Background Set!", "success");
                  return;
              }
 
@@ -3952,7 +3993,7 @@
                  settled = true;
                  const ms = Math.round(performance.now() - startedAt);
                  if (ok) {
-                     document.body.style.backgroundImage = `url("${url}")`;
+                     document.body.style.backgroundImage = backgroundCssFor(url);
                      localStorage.setItem('dashboardBackground', url);
                      debugLog('info', `[Background] loaded in ${ms}ms -- ${url.slice(0, 80)}`);
                      showNotification("Background Set!", "success");
