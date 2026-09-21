@@ -1023,7 +1023,7 @@
         }
         .reddit-refresh-btn:hover { opacity: 1; }
         .reddit-list { flex: 1; overflow-y: auto; min-height: 0; margin-top: 0.25rem; }
-        .reddit-item { display: flex; align-items: baseline; gap: 0.4rem; padding: 0.28rem 0.15rem; }
+        .reddit-item { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.28rem 0.15rem; }
         .reddit-score {
             flex-shrink: 0; font-size: 0.66rem; font-weight: 700;
             color: var(--wb-accent-solid); min-width: 2.2em; text-align: right;
@@ -1982,7 +1982,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0434';
+        const BUILD_ID = '2026-09-21-0443';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2016,8 +2016,6 @@
             'query2.finance.yahoo.com',
             'zenquotes.io',
             'news.google.com',
-            'www.reddit.com',
-            'old.reddit.com',
         ]);
 
         function hostnameOf(url) {
@@ -2324,12 +2322,8 @@
         function parseRedditRss(xmlText, sub) {
             return parseFeedItems(xmlText, REDDIT_POST_LIMIT).map(item => ({
                 title: item.title,
-                // Match the shape the JSON path returns, so one renderer
-                // handles both sources.
-                permalink: item.link.replace(/^https?:\/\/(www\.|old\.)?reddit\.com/i, ''),
-                score: 0,
-                num_comments: 0,
-                fromRss: true,
+                link: item.link,
+                date: item.date,
             }));
         }
 
@@ -2402,53 +2396,27 @@
 
         const REDDIT_POST_LIMIT = 10;
 
-        // Reddit used to be fetchable straight from the browser. It isn't
-        // any more -- www.reddit.com sends no Access-Control-Allow-Origin on
-        // its .json endpoints, so the browser discards the response whatever
-        // it contains, which is why this bubble stopped working. It goes
-        // through the relay now, like the other non-CORS sources.
+        // Reddit is just an RSS feed now. Its .json endpoints refuse
+        // datacenter IPs outright (403 with an HTML block page), so every
+        // request through a relay burned a guaranteed failure plus the
+        // fallback chain behind it -- about 8 seconds of timeouts per
+        // bubble -- before landing on RSS anyway. Going straight to
+        // /r/<sub>/.rss skips all of that.
         async function getRedditData(subreddit) {
             const clean = cleanSubredditName(subreddit);
             if (!/^[A-Za-z0-9_]{2,40}$/.test(clean)) {
                 throw new Error(`"${subreddit}" isn't a valid subreddit name.`);
             }
-            const startedAt = performance.now();
-            // Cache-bust so a relay-cached error for one subreddit doesn't stick.
-            const url = `https://www.reddit.com/r/${clean}/hot.json?limit=${REDDIT_POST_LIMIT}&raw_json=1&_=${Date.now()}`;
-
-            // Reddit blocks datacenter IPs on its .json endpoints, so a relay
-            // request gets a 403 with an HTML block page however well-formed
-            // it is -- nothing the client can fix. Their RSS feed is served
-            // more permissively, so fall back to it rather than failing.
-            let raw;
+            const url = `https://www.reddit.com/r/${clean}/hot/.rss?limit=${REDDIT_POST_LIMIT}`;
+            let xml;
             try {
-                raw = await fetchViaProxy(url, `Reddit:${clean}`);
+                xml = await fetchViaFeedRelay(url, `Reddit:${clean}`);
             } catch (e) {
-                debugLog('warn', `[Reddit:${clean}] JSON endpoint refused, trying RSS`);
-                try {
-                    const rss = await fetchViaFeedRelay(`https://www.reddit.com/r/${clean}/hot/.rss?limit=${REDDIT_POST_LIMIT}`, `Reddit:${clean}`);
-                    const posts = parseRedditRss(rss, clean);
-                    if (posts.length) {
-                        debugLog('info', `[Reddit:${clean}] OK via RSS -- ${posts.length} posts`);
-                        return posts;
-                    }
-                } catch (rssErr) {
-                    debugLog('warn', `[Reddit:${clean}] RSS also refused: ${rssErr.message}`);
-                }
-                throw new Error(`Reddit is refusing requests for r/${clean}. It blocks relays, so this can stop working without warning.`);
+                throw new Error(`Couldn't load r/${clean}: ${e.message}`);
             }
-
-            let data;
-            try { data = JSON.parse(raw); } catch {
-                throw new Error(`Reddit returned something unreadable for r/${clean}.`);
-            }
-            if (data && data.error) throw new Error(`Reddit says: ${data.message || data.error} (r/${clean})`);
-            if (!data || !data.data || !Array.isArray(data.data.children)) {
-                throw new Error(`No subreddit called r/${clean}.`);
-            }
-            const posts = data.data.children.map(c => c.data).filter(Boolean);
+            const posts = parseRedditRss(xml, clean);
             if (!posts.length) throw new Error(`r/${clean} has no posts to show.`);
-            debugLog('info', `[Reddit:${clean}] OK -- ${posts.length} posts (${Math.round(performance.now() - startedAt)}ms)`);
+            debugLog('info', `[Reddit:${clean}] OK -- ${posts.length} posts via RSS`);
             return posts;
         }
 
@@ -3084,15 +3052,17 @@
 
         function renderRedditPosts(listEl, posts) {
             // Post titles are other people's text arriving over the network,
-            // so they're escaped rather than interpolated raw.
+            // so they're escaped rather than interpolated raw. The RSS feed
+            // carries a date but no score or comment count, so show the date
+            // rather than a column of zeros pretending to be scores.
             listEl.innerHTML = (posts || []).map(post => {
-                const href = `https://www.reddit.com${post.permalink || ''}`;
-                const score = typeof post.score === 'number' ? post.score : 0;
-                const comments = typeof post.num_comments === 'number' ? post.num_comments : 0;
-                return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="news-item reddit-item">
-                            <span class="reddit-score">${escapeHtml(String(score))}</span>
+                const when = post.date ? new Date(post.date) : null;
+                const stamp = when && !isNaN(when)
+                    ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                    : '';
+                return `<a href="${escapeHtml(post.link || '')}" target="_blank" rel="noopener noreferrer" class="news-item reddit-item">
                             <span class="reddit-title">${escapeHtml(post.title || '(untitled)')}</span>
-                            <span class="reddit-meta">${escapeHtml(String(comments))} comments</span>
+                            <span class="reddit-meta">${escapeHtml(stamp)}</span>
                         </a>`;
             }).join('') || '<p class="text-gray-400 text-xs">No posts found.</p>';
         }

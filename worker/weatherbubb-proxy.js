@@ -34,10 +34,10 @@ const ALLOWED_TARGET_HOSTS = new Set([
   'query2.finance.yahoo.com',
   'zenquotes.io',
   'news.google.com',
-  // Reddit stopped sending CORS headers on its .json endpoints, so a
-  // browser can't read them directly however well-formed the request is.
-  'www.reddit.com',
-  'old.reddit.com',
+  // Reddit is deliberately absent. Its .json endpoints refuse datacenter
+  // IPs anyway, so allowlisting them bought nothing; the app reads
+  // /r/<sub>/.rss through the feed path instead, which is fenced by the
+  // feed rules rather than by this list.
   // Scoreboards. Tried directly first; this is only the fallback for
   // when ESPN's CORS headers aren't present.
   'site.api.espn.com',
