@@ -112,16 +112,26 @@
             position: absolute;
             right: 0;
             bottom: 0;
-            width: 24px;
-            height: 24px;
+            /* The grab area is the whole corner, not just the marking. A
+               floating bubble is a moving target, so a 24px square meant
+               chasing it; 44px is the usual minimum for a comfortable hit
+               target. Kept clear of bubble content, which is centred --
+               even at the 180px minimum width this reaches only a quarter
+               of the way in. */
+            width: 44px;
+            height: 44px;
             pointer-events: auto;
             cursor: nwse-resize;
             touch-action: none;
-            opacity: 0.45;
+            opacity: 0.4;
             transition: opacity 0.15s ease;
-            /* Two short diagonal strokes, the conventional grip marking. */
+            /* Visual marking stays small and in the corner; the rest of the
+               square is invisible but grabbable. */
             background-image: linear-gradient(135deg, transparent 0 45%, var(--wb-sidebar-text) 45% 55%, transparent 55% 100%),
                               linear-gradient(135deg, transparent 0 65%, var(--wb-sidebar-text) 65% 75%, transparent 75% 100%);
+            background-size: 20px 20px, 20px 20px;
+            background-position: bottom right, bottom right;
+            background-repeat: no-repeat;
             border-bottom-right-radius: 1rem;
         }
         .bubble-resize-handle:hover,
@@ -871,6 +881,14 @@
         .relay-status.bad { color: #f87171; }
         .relay-status.busy { color: var(--wb-sidebar-text); opacity: 0.75; }
 
+        .field-hint {
+            font-size: 0.68rem;
+            line-height: 1.3;
+            opacity: 0.7;
+            margin: 0.25rem 0 0 0;
+        }
+        .field-hint strong { font-weight: 700; opacity: 1; }
+
         /* Debug Panel */
         #debug-panel {
             position: fixed;
@@ -1029,6 +1047,8 @@
                          <option value="SPY">S&amp;P 500 ETF</option>
                          <option value="QQQ">Nasdaq 100 ETF</option>
                      </datalist>
+                     <p class="field-hint">Any symbol works. Capitals are added
+                        as you type, and dots are fine (<strong>BRK.B</strong>).</p>
                 </div>
                  <div class="input-wrapper hidden" data-type="news">
                      <label for="news-topic-select" class="slider-label">Topic:</label>
@@ -1059,6 +1079,8 @@
                          <option value="monero">Monero (XMR)</option>
                          <option value="shiba-inu">Shiba Inu (SHIB)</option>
                      </datalist>
+                     <p class="field-hint">Use the coin's full name, not its
+                        symbol: <strong>bitcoin</strong>, not BTC.</p>
                 </div>
                 <div class="input-wrapper hidden" data-type="quote">
                      <label for="quote-select" class="slider-label">Quote:</label>
@@ -1159,7 +1181,7 @@
          <!-- Layout Management Section -->
         <div class="sidebar-section">
             <h2>Layout</h2>
-             <button id="unlock-all-btn" title="Set every bubble to Animate and let it float freely">
+             <button id="unlock-all-btn" title="Clear every Lock and let all bubbles float freely">
                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75A2.25 2.25 0 001.5 12.75v6.75a2.25 2.25 0 002.25 2.25z" />
                  </svg>
@@ -2254,8 +2276,8 @@
             bubble.innerHTML = `
                 <div class="bubble-header">
                     <label class="header-animate-toggle">
-                        <input type="checkbox" class="toggle-animate form-checkbox rounded text-blue-500 h-3 w-3" ${isStatic ? '' : 'checked'}>
-                        <span>Animate</span>
+                        <input type="checkbox" class="toggle-lock form-checkbox rounded text-blue-500 h-3 w-3" ${isStatic ? 'checked' : ''} title="Hold this bubble still">
+                        <span>Lock</span>
                     </label>
                     <div class="header-buttons">
                          <!-- NEW: Sleep/Wake Button -->
@@ -3159,13 +3181,16 @@
                 saveBubblesState(); 
             });
             
-            bubble.querySelector('.toggle-animate').addEventListener('change', (e) => {
-                const isStatic = !e.target.checked;
-                // Cannot animate if sleeping
+            bubble.querySelector('.toggle-lock').addEventListener('change', (e) => {
+                // Checked now means LOCKED (static) -- the inverse of the old
+                // "Animate" checkbox this replaced.
+                const isStatic = e.target.checked;
+                // A sleeping bubble is held static regardless, so it can't be
+                // unlocked into floating.
                 if (bubble.isSleeping && !isStatic) {
-                     e.target.checked = false; // Prevent checking
-                     showNotification("Wake bubble to animate.", "info");
-                     return; 
+                     e.target.checked = true; // Stays locked
+                     showNotification("Wake bubble before unlocking it.", "info");
+                     return;
                 }
                 Body.setStatic(body, isStatic);
 
@@ -3183,7 +3208,7 @@
                  bubble.classList.toggle('sleeping');
                  
                  // Sleeping bubbles MUST be static
-                 const isNowStatic = bubble.isSleeping || !bubble.querySelector('.toggle-animate').checked;
+                 const isNowStatic = bubble.isSleeping || bubble.querySelector('.toggle-lock').checked;
                  Body.setStatic(body, isNowStatic);
 
                  // Update button icon/title
@@ -3585,6 +3610,27 @@
             localStorage.setItem('dashboardTheme', theme);
         });
 
+        // Normalise case while typing rather than only on submit, so the
+        // field shows exactly what will be sent. The hints under these
+        // inputs promise this; doing it invisibly at submit time would
+        // leave the field contradicting them.
+        stockInput.addEventListener('input', () => {
+            const caret = stockInput.selectionStart;
+            const upper = stockInput.value.toUpperCase();
+            if (upper !== stockInput.value) {
+                stockInput.value = upper;
+                stockInput.setSelectionRange(caret, caret);
+            }
+        });
+        cryptoInput.addEventListener('input', () => {
+            const caret = cryptoInput.selectionStart;
+            const lower = cryptoInput.value.toLowerCase();
+            if (lower !== cryptoInput.value) {
+                cryptoInput.value = lower;
+                cryptoInput.setSelectionRange(caret, caret);
+            }
+        });
+
         // --- Data relay settings + self-test ---
         const relayUrlInput = document.getElementById('relay-url-input');
         const relayTestBtn = document.getElementById('relay-test-btn');
@@ -3741,15 +3787,15 @@
             localStorage.setItem('scrollBarSide', side);
         });
 
-        // Master Unlock: set every bubble's Animate checkbox on and let it float
+        // Master Unlock: clear every bubble's Lock checkbox and let it float
         unlockAllBtn.addEventListener('click', () => {
             let unlocked = 0;
             for (const [bodyId, bubble] of bubbleMap.entries()) {
                 if (bubble.isSleeping) continue; // Sleeping bubbles must stay static
                 const body = Composite.get(matterWorld, bodyId, 'body');
-                const checkbox = bubble.querySelector('.toggle-animate');
+                const checkbox = bubble.querySelector('.toggle-lock');
                 if (!body || !checkbox) continue;
-                checkbox.checked = true;
+                checkbox.checked = false;   // unchecked == unlocked == floating
                 Body.setStatic(body, false);
                 const bubbleData = JSON.parse(bubble.dataset.bubbleData);
                 bubbleData.isStatic = false;
