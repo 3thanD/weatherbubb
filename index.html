@@ -1588,6 +1588,14 @@
         // choice is stored, that choice wins -- including "no background",
         // which is stored explicitly so clearing it doesn't silently come
         // back on the next load.
+        // Stamped at release and mirrored in build.txt. index.html is a
+        // single file with no hashed asset name, so a browser holding a
+        // cached copy shows stale UI while the deploy has plainly
+        // succeeded -- indistinguishable, from the user's side, from the
+        // change never having shipped. This makes that state visible
+        // rather than something to guess at.
+        const BUILD_ID = '2026-09-21-0341';
+
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
 
@@ -3631,6 +3639,29 @@
             }
         });
 
+        // Compares the build this tab is running against the one actually
+        // deployed. Reads build.txt -- a few bytes -- rather than
+        // re-fetching index.html, which would mean pulling ~200KB past the
+        // cache on every single load just to read one string.
+        async function checkForNewBuild() {
+            try {
+                const base = window.location.pathname.replace(/[^/]*$/, '');
+                const res = await fetch(`${base}build.txt?t=${Date.now()}`, { cache: 'no-store' });
+                if (!res.ok) return;
+                const deployed = (await res.text()).trim();
+                if (!deployed) return;
+                if (deployed !== BUILD_ID) {
+                    debugLog('warn', `[Build] This tab is running ${BUILD_ID}, but ${deployed} is deployed -- you're seeing a cached copy. Reload with Ctrl+Shift+R (Cmd+Shift+R on Mac).`);
+                    showNotification(`Update available (${deployed}). Reload to get it.`, 'info');
+                } else {
+                    debugLog('info', `[Build] ${BUILD_ID} is the deployed build.`);
+                }
+            } catch (e) {
+                // Never let a version check break the page.
+                debugLog('warn', `[Build] Couldn't check for updates: ${e.message}`);
+            }
+        }
+
         // --- Data relay settings + self-test ---
         const relayUrlInput = document.getElementById('relay-url-input');
         const relayTestBtn = document.getElementById('relay-test-btn');
@@ -3978,7 +4009,8 @@
             debugLog('info', `WeatherBubb loaded -- ${window.innerWidth}x${window.innerHeight}, UA: ${navigator.userAgent}`);
             // The relay accepts a fixed set of origins, so this line is the
             // difference between diagnosing a rejection and guessing at it.
-            debugLog('info', `[Env] origin: ${window.location.origin} | page: ${window.location.pathname} | relay: ${getRelayUrl() || '(none configured)'}`);
+            debugLog('info', `[Env] build: ${BUILD_ID} | origin: ${window.location.origin} | page: ${window.location.pathname} | relay: ${getRelayUrl() || '(none configured)'}`);
+            checkForNewBuild();
             if (localStorage.getItem('debugMode') === '1') showDebugPanel();
 
             // Restore saved theme + float speed before physics/bubbles spin up
