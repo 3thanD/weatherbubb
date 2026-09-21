@@ -1475,11 +1475,11 @@
             }
         }
 
-        // Our own Cloudflare Worker relay (see worker/weatherbubb-proxy.js
-        // and worker/README.md). Paste the deployed worker URL here -- e.g.
-        // 'https://weatherbubb-proxy.SUBDOMAIN.workers.dev' -- and it
-        // becomes the first proxy tried. Left empty it's simply skipped,
-        // so the app behaves exactly as before until it's filled in.
+        // Our own Cloudflare Worker relay (source: worker/weatherbubb-proxy.js,
+        // deploy notes: worker/README.md). It's tried right after a direct
+        // request, before any public proxy. Blanking this string disables it
+        // cleanly -- the entry is dropped from the list and the app falls
+        // back to the old behaviour.
         //
         // This exists because every free public CORS relay the app depended
         // on eventually failed: corsproxy.io started returning 401 on every
@@ -1488,7 +1488,7 @@
         // timing out on 100% of requests. A relay we control is the only
         // durable fix. No API key is involved -- none of the upstream APIs
         // need one, so there's nothing secret in that URL.
-        const CUSTOM_PROXY_URL = '';
+        const CUSTOM_PROXY_URL = 'https://weatherbubb-proxy.ethamdavis89.workers.dev';
 
         async function fetchViaProxy(targetUrl, label = 'fetch') {
             // Trimmed based on real debug-log data from the live site:
