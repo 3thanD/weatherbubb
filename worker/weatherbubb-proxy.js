@@ -33,7 +33,6 @@ const ALLOWED_TARGET_HOSTS = new Set([
   'query1.finance.yahoo.com',
   'query2.finance.yahoo.com',
   'zenquotes.io',
-  'news.google.com',
   // Reddit is deliberately absent. Its .json endpoints refuse datacenter
   // IPs anyway, so allowlisting them bought nothing; the app reads
   // /r/<sub>/.rss through the feed path instead, which is fenced by the

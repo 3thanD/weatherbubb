@@ -2004,7 +2004,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-21-0505';
+        const BUILD_ID = '2026-09-23-0327';
 
         const DEFAULT_THEME = 'bonappel';
         const DEFAULT_BACKGROUND = 'https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80';
@@ -2037,7 +2037,6 @@
             'query1.finance.yahoo.com',
             'query2.finance.yahoo.com',
             'zenquotes.io',
-            'news.google.com',
         ]);
 
         function hostnameOf(url) {
@@ -2061,10 +2060,14 @@
             const worker = relayUrl
                 ? { name: 'worker', build: (u) => `${relayUrl}?url=${encodeURIComponent(u)}` }
                 : null;
-            // Kept as a last-ditch fallback only. Currently failing 100% of
-            // the time from at least one real device, so it is not
-            // something to rely on.
-            const allorigins = { name: 'allorigins', build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` };
+            // allorigins is gone. Across every debug log from the live site it
+            // failed 100% of the time -- timing out, aborting, or refusing --
+            // while adding 5-8 seconds to each failure before the real error
+            // could surface. A fallback that has never once worked isn't
+            // resilience, it's latency. To restore it:
+            //   const allorigins = { name: 'allorigins',
+            //     build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}` };
+            // and add it back to the arrays below.
 
             // For hosts that have never sent CORS headers, a direct attempt
             // isn't a cheap optimistic try -- it's a guaranteed failure that
@@ -2075,8 +2078,8 @@
             // self-heals for free if a host ever does add CORS support.
             const relayFirst = RELAY_REQUIRED_HOSTS.has(hostnameOf(targetUrl));
             const proxyBuilders = (relayFirst && worker
-                ? [worker, direct, allorigins]
-                : [direct, ...(worker ? [worker] : []), allorigins]);
+                ? [worker, direct]
+                : [direct, ...(worker ? [worker] : [])]);
             let lastError;
             for (const proxy of proxyBuilders) {
                 const startedAt = performance.now();
@@ -2235,44 +2238,66 @@
         }
         
         // News (via rss2json proxy)
-        // Fetches the raw Google News RSS feed through fetchViaProxy()'s
-        // direct-then-5-proxy fallback chain and parses the XML itself,
-        // instead of a single unproxied call to rss2json.com with no
-        // fallback at all if that one specific relay service has a bad
-        // moment (as observed live: it failed while a direct-CORS API,
-        // CoinGecko, succeeded at the same time).
+        // News comes from publishers directly, not Google News.
+        //
+        // news.google.com answers relayed requests with HTTP 503 and its
+        // "Sorry..." interstitial -- the bot-detection page, the same class
+        // of block Reddit applies. It is aimed at the relay's datacenter IP,
+        // so no amount of fixing the request helps, and direct fetches fail
+        // on CORS. That made the news bubble unreliable by construction.
+        //
+        // Publisher feeds have no such block, so each topic lists several
+        // and they're tried in order: one outlet having a bad morning
+        // shouldn't empty the bubble. Google stays last, since it does
+        // sometimes work and costs nothing to try once everything else has
+        // failed.
+        const NEWS_FEEDS = {
+            world: [
+                'https://feeds.bbci.co.uk/news/world/rss.xml',
+                'https://feeds.npr.org/1004/rss.xml',
+                'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=w',
+            ],
+            business: [
+                'https://feeds.bbci.co.uk/news/business/rss.xml',
+                'https://feeds.npr.org/1006/rss.xml',
+                'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=b',
+            ],
+            technology: [
+                'https://feeds.bbci.co.uk/news/technology/rss.xml',
+                'https://feeds.arstechnica.com/arstechnica/index',
+                'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=t',
+            ],
+            entertainment: [
+                'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
+                'https://feeds.npr.org/1008/rss.xml',
+                'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=e',
+            ],
+            science: [
+                'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
+                'https://feeds.npr.org/1007/rss.xml',
+                'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=s',
+            ],
+        };
+
         async function getNewsData(topic) {
-            const feeds = {
-                world: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=w',
-                business: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=b',
-                technology: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=t',
-                entertainment: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=e',
-                science: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=s'
-            };
-            const rssUrl = feeds[topic] || feeds.world;
-
-            let xmlText;
-            try {
-                xmlText = await fetchViaProxy(rssUrl, `News:${topic}`);
-            } catch (e) {
-                throw new Error("Could not fetch news.");
+            const sources = NEWS_FEEDS[topic] || NEWS_FEEDS.world;
+            let lastError;
+            for (const url of sources) {
+                try {
+                    const xml = await fetchViaFeedRelay(url, `News:${topic}`);
+                    // Same parser the RSS bubble uses, so entities and CDATA
+                    // are handled once, in one place.
+                    const items = parseFeedItems(xml, 10);
+                    if (items.length) {
+                        debugLog('info', `[News:${topic}] ${items.length} items from ${new URL(url).hostname}`);
+                        return items.map(i => ({ title: i.title, link: i.link || '#' }));
+                    }
+                } catch (e) {
+                    lastError = e;
+                    debugLog('warn', `[News:${topic}] ${new URL(url).hostname} failed: ${e.message}`);
+                }
             }
-
-            let xmlDoc;
-            try {
-                xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
-                if (xmlDoc.querySelector('parsererror')) throw new Error('XML parse error');
-            } catch (e) {
-                console.error("Failed to parse news RSS:", xmlText?.slice(0, 200));
-                throw new Error("News feed returned invalid data.");
-            }
-
-            const items = Array.from(xmlDoc.querySelectorAll('item')).slice(0, 10).map(item => ({
-                title: item.querySelector('title')?.textContent || 'Untitled',
-                link: item.querySelector('link')?.textContent || '#',
-            }));
-            if (items.length === 0) throw new Error("No articles found for this topic.");
-            return items;
+            throw new Error(`No news source responded for "${topic}". ${lastError ? lastError.message : ''}`.trim());
         }
         
         // NEW: Reddit Feed
