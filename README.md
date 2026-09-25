@@ -49,6 +49,8 @@ out of it.
 | **Timer / Countdown** | Counts down to or from | Your device |
 | **Note / To-do / Calculator / Image** | Local tools | You |
 
+![Sports scores, a joke bubble, a countdown to a holiday and an image bubble, on a starfield background](docs/screenshots/bubble-types.webp)
+
 ![The same dashboard on a different background — a merged three-stock ticker, an on-this-day feed, a to-do list, a timer, quick links and a quote](docs/screenshots/dashboard-forest.webp)
 
 ### Things the bubbles do

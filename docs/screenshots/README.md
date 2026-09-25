@@ -3,6 +3,7 @@
 | File | Shows |
 |---|---|
 | `dashboard.webp` | The hero image — merged three-stock ticker, weather, a subreddit feed, quick links, to-do, timer, quote |
+| `bubble-types.webp` | Sports scores, jokes, a countdown and an image bubble — types the other shots don't show |
 | `dashboard-forest.webp` | The same dashboard on a different background, showing the theming |
 | `settings-menu.webp` | The menu open: themes, gravity, float speed, zoom, backgrounds, layout controls |
 
@@ -43,6 +44,13 @@ im.resize((w, round(im.height * w / im.width)), Image.LANCZOS).save(
     'docs/screenshots/name.webp', 'WEBP', quality=88, method=6)
 "
 ```
+
+## What earns a slot
+
+A screenshot has to show something the others don't. Four were offered at
+once and only one went in: the rest were the same dashboard on a background
+already covered, which costs bytes and a scroll for no new information.
+Before adding one, name the thing in it that isn't anywhere else.
 
 ## Before you take one
 
