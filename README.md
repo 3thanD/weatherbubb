@@ -243,6 +243,16 @@ Issues and pull requests welcome. If you're reporting a bug, the Debug log is
 worth more than a screenshot — it has the exact error, the timings and which
 relay served what.
 
+## License
+
+[MIT](LICENSE). Use it, fork it, host your own, strip out the parts you don't
+want. Attribution is the only condition.
+
+Third-party pieces keep their own licenses: [Matter.js](https://brm.io/matter-js/)
+(MIT), [Tailwind CSS](https://tailwindcss.com) (MIT), Inter (SIL Open Font
+License) and Permanent Marker (Apache 2.0). None are vendored into this repo
+today; each loads from its own CDN.
+
 ---
 
 Built with [Claude Code](https://claude.com/claude-code).
