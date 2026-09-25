@@ -12,7 +12,7 @@ rearrange.
 It is a single HTML file plus one small Cloudflare Worker. No build step, no
 framework, no database, no accounts, no tracking.
 
-![WeatherBubb dashboard](docs/screenshots/dashboard-space.png)
+![WeatherBubb — a dashboard of floating bubbles](docs/screenshots/dashboard-beach.webp)
 
 ---
 
@@ -49,7 +49,7 @@ out of it.
 | **Timer / Countdown** | Counts down to or from | Your device |
 | **Note / To-do / Calculator / Image** | Local tools | You |
 
-![Merged stock bubble, to-do list, quick links and a timer](docs/screenshots/dashboard-forest.png)
+![Merged stock bubble, to-do list, quick links and a timer](docs/screenshots/dashboard-forest.webp)
 
 ### Things the bubbles do
 
@@ -64,7 +64,7 @@ out of it.
 
 ---
 
-![The settings menu](docs/screenshots/sidebar.png)
+![The settings menu](docs/screenshots/sidebar.webp)
 
 ## Sync between computers
 
