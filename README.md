@@ -10,8 +10,9 @@ stocks, crypto, news, a subreddit, a clock, a calculator, a to-do list — and
 they drift around a physics canvas you can shove, resize, lock, merge and
 rearrange.
 
-It is a single HTML file plus one small Cloudflare Worker. No build step, no
-framework, no database, no accounts, no tracking.
+It is a single HTML file plus one small Cloudflare Worker. No framework, no
+database, no accounts, no tracking, and nothing loaded from anyone else's
+CDN — Tailwind, the physics engine and both fonts are compiled into the file.
 
 ![WeatherBubb — a dashboard of floating bubbles: a merged three-stock ticker, weather, a subreddit feed, quick links, a to-do list, a timer and a quote](docs/screenshots/dashboard.webp)
 
@@ -123,6 +124,48 @@ Deploy notes: [`worker/README.md`](worker/README.md).
 
 ---
 
+## Why nothing loads from a CDN
+
+The page used to pull Tailwind from `cdn.tailwindcss.com`, Matter.js from
+cdnjs, and Inter and Permanent Marker from Google Fonts. Four third-party
+origins, each one handed every visitor's IP address and user agent on every
+page view. That is difficult to square with a dashboard whose pitch is that
+nothing is watching you, and Google Fonts hotlinking in particular has been
+litigated in the EU.
+
+So all four are now compiled into `index.html`:
+
+- **Tailwind** is built to static CSS from the classes this file actually
+  uses. 14KB, against roughly 100KB for the in-browser compiler the CDN ships
+  — which Tailwind's own documentation says is not for production.
+- **Matter.js 0.19.0** is inlined from the npm package. A pinned version that
+  cannot change underneath the app.
+- **Inter and Permanent Marker** are embedded as base64 woff2, latin subsets
+  only. Text outside those ranges falls through to the system font stack.
+
+The file is 516KB, about 188KB over the wire once gzipped. That is the price
+of zero third-party requests, and it is worth paying.
+
+One exception, and it is deliberate: the default background is an Unsplash
+photograph, so a first visit does fetch one image from `images.unsplash.com`.
+Pick any gradient preset in **Appearance** and even that goes away.
+
+### Building
+
+Only needed if you add Tailwind classes that aren't already in the file:
+
+```
+npm install tailwindcss@3.4.17
+npx tailwindcss -i in.css -o out.css --minify \
+  --content index.html
+```
+
+where `in.css` is the three `@tailwind base/components/utilities` lines. Paste
+the result over the first `<style>` block in `index.html`. Nothing else in the
+project has a build step.
+
+---
+
 ## Running it yourself
 
 ```
@@ -131,9 +174,11 @@ cd weatherbubb
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000`. That's the whole setup — `index.html` has
-no build step and no dependencies beyond two CDN scripts (Matter.js and
-Tailwind).
+Then open `http://localhost:8000`. That's the whole setup. `index.html` has no
+dependencies at all: Tailwind, Matter.js and both fonts are compiled into the
+file, so it loads nothing from anyone else's server. Saving that one file is a
+complete copy of the app, and it works offline apart from the bubbles that
+fetch live data.
 
 Relay-backed bubbles need a worker. Deploy `worker/weatherbubb-proxy.js`
 (instructions in `worker/README.md`), add your origin to `ALLOWED_ORIGINS`,
@@ -248,10 +293,11 @@ relay served what.
 [MIT](LICENSE). Use it, fork it, host your own, strip out the parts you don't
 want. Attribution is the only condition.
 
-Third-party pieces keep their own licenses: [Matter.js](https://brm.io/matter-js/)
+Third-party pieces keep their own licenses, and all four are now embedded in
+`index.html` rather than loaded from a CDN: [Matter.js](https://brm.io/matter-js/)
 (MIT), [Tailwind CSS](https://tailwindcss.com) (MIT), Inter (SIL Open Font
-License) and Permanent Marker (Apache 2.0). None are vendored into this repo
-today; each loads from its own CDN.
+License) and Permanent Marker (Apache 2.0). Their license terms travel with
+the file, which is what the MIT and OFL notices in it are for.
 
 ---
 
