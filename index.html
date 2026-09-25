@@ -574,6 +574,11 @@
          }
          #sidebar .bubble-input, #sidebar select.bubble-input {
              width: auto; /* Allow inputs to size naturally or expand */
+             /* Lets a flex child shrink past its intrinsic width. Without
+                it a select is as wide as its longest option ("Trader
+                (Stocks + Crypto + News)"), which overflowed the sidebar on
+                a narrow phone and scrolled the whole panel sideways. */
+             min-width: 0;
              flex-grow: 1;
              background-color: var(--wb-input-bg);
              color: var(--wb-sidebar-text);
@@ -814,13 +819,27 @@
             font-weight: 700;
         }
 
+         /* Preset picker on its own line, then the URL field and its Set
+            button together on the next one.
+
+            These three used to share one nowrap row. A flex item will not
+            shrink below its intrinsic minimum unless it is told it may, and
+            the placeholder "Or paste an image URL..." sets a wide one, so
+            the row was wider than the 300px sidebar. That overflow is what
+            made the sidebar scroll sideways on a phone, and a sidebar that
+            slides horizontally under your thumb is one that feels like it
+            will not scroll down. min-width:0 is what actually lets them
+            shrink; the wrap is what keeps them readable once they do. */
+         #sidebar .bg-input-wrapper {
+             flex-wrap: wrap;
+         }
          #sidebar #custom-bg-select {
-             width: auto; /* Adjust width */
-             flex-grow: 1;
+             flex: 1 1 100%;
+             min-width: 0;
          }
          #sidebar #custom-bg-input {
-             width: auto; /* Adjust width */
-             flex-grow: 2; /* Take more space */
+             flex: 1 1 8rem;
+             min-width: 0;
          }
          #sidebar #set-bg-btn {
              padding: 0.25rem 0.5rem; /* Match input height */
@@ -877,7 +896,12 @@
                independent layer up front is the standard fix. */
             will-change: transform;
             z-index: 1000;
-            overflow-y: auto; /* Allow scrolling within sidebar */
+            overflow-y: auto;
+            /* Vertical only. Anything that overflows sideways is a bug in
+               that row, and letting it scroll just hides the bug while
+               making the whole panel feel loose on touch. */
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch; /* Allow scrolling within sidebar */
             display: flex;
             flex-direction: column;
             gap: 1.5rem; /* Space out sections */
@@ -2135,7 +2159,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0525';
+        const BUILD_ID = '2026-09-25-0554';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
