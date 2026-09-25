@@ -2025,7 +2025,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0331';
+        const BUILD_ID = '2026-09-25-0346';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -2617,8 +2617,15 @@
                         const observedWidth = borderBox ? borderBox.inlineSize : entry.contentRect.width;
                         const observedHeight = borderBox ? borderBox.blockSize : entry.contentRect.height;
                         // Enforce min size
-                        const newWidth = Math.max(BUBBLE_MIN_WIDTH * currentScale, observedWidth); // Scale min size too
-                        const newHeight = Math.max(BUBBLE_MIN_HEIGHT * currentScale, observedHeight);
+                        // Clamped at both ends. A bubble taller or wider than
+                        // the play area permanently overlaps the walls, and
+                        // Matter resolving that overlap is what launches it
+                        // off screen -- so oversize isn't just awkward, it's
+                        // the mechanism behind the disappearances.
+                        const maxWidth = Math.max(BUBBLE_MIN_WIDTH, contentWidth - 16);
+                        const maxHeight = Math.max(BUBBLE_MIN_HEIGHT, contentHeight - 16);
+                        const newWidth = Math.min(maxWidth, Math.max(BUBBLE_MIN_WIDTH * currentScale, observedWidth));
+                        const newHeight = Math.min(maxHeight, Math.max(BUBBLE_MIN_HEIGHT * currentScale, observedHeight));
 
                         // Calculate scale from *current* physics body size
                         const oldWidth = body.customWidth;
@@ -2679,6 +2686,9 @@
             });
             
             window.addEventListener('resize', () => {
+                // The bounds just moved; anything now outside them is
+                // stranded, and a locked bubble can't drift back.
+                setTimeout(recoverEscapedBubbles, 250);
                 updateLayoutCSS();
                 updateWalls();
                 updateMobileScrollIndicator();
@@ -2896,8 +2906,12 @@
                     // rather than drifting at anything but 100%.
                     const w = startW + (ev.clientX - startX) / scale;
                     const h = startH + (ev.clientY - startY) / scale;
-                    bubble.style.width = Math.max(BUBBLE_MIN_WIDTH * scale, w) + 'px';
-                    bubble.style.height = Math.max(BUBBLE_MIN_HEIGHT * scale, h) + 'px';
+                    // Stop at the window edge rather than letting the drag run
+                    // past it and having the observer quietly claw it back.
+                    const maxW = Math.max(BUBBLE_MIN_WIDTH, contentWidth - 16);
+                    const maxH = Math.max(BUBBLE_MIN_HEIGHT, contentHeight - 16);
+                    bubble.style.width = Math.min(maxW, Math.max(BUBBLE_MIN_WIDTH * scale, w)) + 'px';
+                    bubble.style.height = Math.min(maxH, Math.max(BUBBLE_MIN_HEIGHT * scale, h)) + 'px';
                 };
                 const onUp = () => {
                     handle.removeEventListener('pointermove', onMove);
@@ -4427,8 +4441,8 @@
                 return;
             }
 
-            removeBubble(source);
-            removeBubble(target);
+            removeBubble(source, 'merged into a group');
+            removeBubble(target, 'merged into a group');
             saveBubblesState();
             debugLog('info', `[Merge] combined into a group of ${children.length}`);
             showNotification(`Merged ${children.length} bubbles.`, 'success');
@@ -4464,15 +4478,31 @@
             let recovered = 0;
             for (const [bubble, bodyId] of reverseBubbleMap.entries()) {
                 const body = Composite.get(matterWorld, bodyId, 'body');
-                if (!body || body.isStatic) continue;
+                // Locked bubbles were skipped here, which got it exactly
+                // backwards: a locked bubble cannot drift back on its own, so
+                // it is the one that stays lost. Shrinking the window is
+                // enough to strand one -- the bounds move, the bubble
+                // doesn't -- and a locked bubble outside them was gone for
+                // good.
+                if (!body) continue;
                 const w = body.customWidth || BUBBLE_DEFAULT_WIDTH;
                 const h = body.customHeight || BUBBLE_DEFAULT_HEIGHT;
                 const { x, y } = body.position;
+                // Lost means "no part of it is on screen", not "it is a whole
+                // bubble-width past the edge". The old test scaled its
+                // tolerance with the bubble, so a tall one could sit entirely
+                // below the viewport and still count as fine: at 877px tall
+                // in a 486px-high area it needed y > 1363 before anything
+                // noticed.
                 const outOfBounds =
                     !Number.isFinite(x) || !Number.isFinite(y) ||
-                    x < -w || x > contentWidth + w ||
-                    y < -h || y > contentHeight + h;
+                    x + w / 2 <= 0 || x - w / 2 >= contentWidth ||
+                    y + h / 2 <= 0 || y - h / 2 >= contentHeight;
                 if (!outOfBounds) continue;
+                const target = clampBodyPosition(
+                    Number.isFinite(x) ? x : contentWidth / 2,
+                    Number.isFinite(y) ? y : contentHeight / 2, w, h);
+                debugLog('warn', `[Physics] off screen at ${Math.round(x)},${Math.round(y)} (${Math.round(w)}x${Math.round(h)}) in ${Math.round(contentWidth)}x${Math.round(contentHeight)} -> moving to ${Math.round(target.x)},${Math.round(target.y)} (static: ${body.isStatic})`);
                 Body.setPosition(body, clampBodyPosition(
                     Number.isFinite(x) ? x : contentWidth / 2,
                     Number.isFinite(y) ? y : contentHeight / 2, w, h));
@@ -4490,8 +4520,18 @@
         // Teardown for a bubble, shared by the close button and by merging
         // (which removes the originals once they've been absorbed). Skipping
         // any one of these leaks an interval, a physics body or a map entry.
-        function removeBubble(bubble) {
+        function removeBubble(bubble, reason = 'removed') {
             if (!bubble) return;
+            // Every disappearance is logged. Closing, splitting and merging
+            // all destroyed bubbles silently, so a report of "it vanished"
+            // was indistinguishable in the log from a misclicked close.
+            try {
+                const d = JSON.parse(bubble.dataset.bubbleData || '{}');
+                const what = d.type === 'group'
+                    ? `group of ${(d.children || []).length} (${(d.children || []).map(c => c && c.type).join(', ')})`
+                    : (d.type || 'bubble');
+                debugLog('info', `[Bubble] ${reason}: ${what}`);
+            } catch { debugLog('info', `[Bubble] ${reason}`); }
             if (bubble.intervalId) clearInterval(bubble.intervalId);
             const bodyId = reverseBubbleMap.get(bubble);
             if (bodyId !== undefined) {
@@ -4621,10 +4661,10 @@
                 // collapse it back rather than leaving a pointless wrapper.
                 const last = children[0];
                 last.x = data.x; last.y = data.y;
-                removeBubble(groupBubble);
+                removeBubble(groupBubble, 'group collapsed to its last member');
                 await createAndDisplayBubble(last.type, last);
             } else if (children.length === 0) {
-                removeBubble(groupBubble);
+                removeBubble(groupBubble, 'group emptied by splitting');
             } else {
                 data.children = children;
                 groupBubble.dataset.bubbleData = JSON.stringify(data);
@@ -4793,7 +4833,7 @@
             attachMergeHandle(bubble);
 
             bubble.querySelector('.close-btn').addEventListener('click', () => {
-                removeBubble(bubble);
+                removeBubble(bubble, 'closed by the X button');
                 saveBubblesState();
             });
             
