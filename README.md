@@ -12,7 +12,7 @@ rearrange.
 It is a single HTML file plus one small Cloudflare Worker. No build step, no
 framework, no database, no accounts, no tracking.
 
-![WeatherBubb — a dashboard of floating bubbles: a merged three-stock ticker, weather, a subreddit feed, quick links, a to-do list, a timer and a quote](docs/screenshots/dashboard-beach.webp)
+![WeatherBubb — a dashboard of floating bubbles: a merged three-stock ticker, weather, a subreddit feed, quick links, a to-do list, a timer and a quote](docs/screenshots/dashboard.webp)
 
 ---
 
@@ -49,8 +49,6 @@ out of it.
 | **Timer / Countdown** | Counts down to or from | Your device |
 | **Note / To-do / Calculator / Image** | Local tools | You |
 
-![Merged stock bubble, to-do list, quick links and a timer](docs/screenshots/dashboard-forest.webp)
-
 ### Things the bubbles do
 
 - **Merge** — drag the two-circles handle from one bubble onto another and
@@ -64,7 +62,7 @@ out of it.
 
 ---
 
-![The settings menu](docs/screenshots/sidebar.webp)
+![The settings menu: themes, gravity, float speed, zoom, backgrounds and layout controls](docs/screenshots/settings-menu.webp)
 
 ## Sync between computers
 
