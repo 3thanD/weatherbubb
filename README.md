@@ -49,6 +49,8 @@ out of it.
 | **Timer / Countdown** | Counts down to or from | Your device |
 | **Note / To-do / Calculator / Image** | Local tools | You |
 
+![The same dashboard on a different background — a merged three-stock ticker, an on-this-day feed, a to-do list, a timer, quick links and a quote](docs/screenshots/dashboard-forest.webp)
+
 ### Things the bubbles do
 
 - **Merge** — drag the two-circles handle from one bubble onto another and

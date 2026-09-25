@@ -3,6 +3,7 @@
 | File | Shows |
 |---|---|
 | `dashboard.webp` | The hero image — merged three-stock ticker, weather, a subreddit feed, quick links, to-do, timer, quote |
+| `dashboard-forest.webp` | The same dashboard on a different background, showing the theming |
 | `settings-menu.webp` | The menu open: themes, gravity, float speed, zoom, backgrounds, layout controls |
 
 ## Naming
@@ -12,9 +13,13 @@ Name for **what the shot shows**, not what it looked like on the day.
 changes; `dashboard-beach.webp` stopped being true the moment the wallpaper
 did, and a name that lies is worse than a dull one.
 
-Lowercase, hyphenated, one idea per file. If you need variants later, qualify
-by content rather than decoration: `dashboard-mobile.webp`,
-`dashboard-merged-bubbles.webp`.
+Lowercase, hyphenated, one idea per file.
+
+`dashboard-forest.webp` looks like it breaks that rule and doesn't. When two
+shots differ *only* in their background, the background is the thing being
+shown — that image exists to demonstrate the theming, so naming it after the
+background is naming it after its content. The rule is about the hero, whose
+name kept going stale as the wallpaper changed.
 
 ## Format
 
