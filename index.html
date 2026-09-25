@@ -2044,7 +2044,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0351';
+        const BUILD_ID = '2026-09-25-0359';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -3036,7 +3036,14 @@
         let weatherIconDefsReady = false;
         function ensureWeatherIconDefs(svgDefs) {
             if (weatherIconDefsReady || document.getElementById('wb-weather-icon-defs')) return;
-            const host = document.createElement('svg');
+            // createElementNS, not createElement: document.createElement('svg')
+            // makes an *HTML* element that happens to be named "svg", so the
+            // symbols inside it are not in the SVG namespace and
+            // <use href="#..."> resolves to nothing. The icons vanish
+            // entirely, while still measuring the right size -- which is how
+            // this got past a test that only checked dimensions.
+            const SVG_NS = 'http://www.w3.org/2000/svg';
+            const host = document.createElementNS(SVG_NS, 'svg');
             host.setAttribute('id', 'wb-weather-icon-defs');
             host.setAttribute('aria-hidden', 'true');
             host.setAttribute('width', '0');
@@ -5295,42 +5302,62 @@
         
         // NEW: Arrange Bubbles Function
         function arrangeBubbles() {
-            const bodies = Composite.allBodies(matterWorld).filter(b => bubbleMap.has(b.id)); // Arrange ALL bubbles
-            bodies.sort((a, b) => a.id - b.id); // Stable sort
+            const bodies = Composite.allBodies(matterWorld).filter(b => bubbleMap.has(b.id));
+            bodies.sort((a, b) => a.id - b.id); // Stable order
 
-            const padding = 20 * currentScale; // Scale padding
+            const padding = 20 * currentScale;
             const containerWidth = contentWidth;
             let x = padding;
-             // Use 0 as the top boundary now
-             let yTopBoundary = padding; 
-            let y = yTopBoundary;
+            let y = padding;
             let rowMaxHeight = 0;
+            let overflowed = false;
 
             bodies.forEach(body => {
                 const bubble = bubbleMap.get(body.id);
-                const bubbleData = JSON.parse(bubble.dataset.bubbleData);
-                const w = bubbleData.width;
-                const h = bubbleData.height;
 
-                if (x + w + padding > containerWidth) {
-                    // Move to next row
+                // Measure the element, don't trust the saved data. This read
+                // its width and height out of bubbleData, which is only as
+                // fresh as the last thing that wrote it -- so a bubble that
+                // had grown (content-fitting does exactly that) was laid out
+                // at its old size and the next row started on top of it.
+                // offsetWidth/offsetHeight are what is actually on screen.
+                const w = bubble.offsetWidth || body.customWidth || BUBBLE_DEFAULT_WIDTH;
+                const h = bubble.offsetHeight || body.customHeight || BUBBLE_DEFAULT_HEIGHT;
+
+                // The render loop positions each bubble from customWidth/Height,
+                // so a mismatch with the element places it somewhere other than
+                // where it was measured. Re-sync while we're here.
+                if (Math.abs((body.customWidth || 0) - w) > 1 || Math.abs((body.customHeight || 0) - h) > 1) {
+                    body.customWidth = w;
+                    body.customHeight = h;
+                }
+
+                if (x + w + padding > containerWidth && x > padding) {
                     x = padding;
                     y += rowMaxHeight + padding;
                     rowMaxHeight = 0;
                 }
-                
-                // Set position (center of the body)
-                Body.setPosition(body, { x: x + w / 2, y: y + h / 2 });
-                Body.setVelocity(body, { x: 0, y: 0 }); // Stop movement
-                Body.setAngularVelocity(body, 0); // Stop rotation
-                
+
+                if (y + h > contentHeight) overflowed = true;
+
+                // Clamped, so nothing is placed off screen even when the
+                // bubbles genuinely don't all fit. Overlap is recoverable --
+                // a bubble parked outside the viewport is not.
+                Body.setPosition(body, clampBodyPosition(x + w / 2, y + h / 2, w, h));
+                Body.setVelocity(body, { x: 0, y: 0 });
+                Body.setAngularVelocity(body, 0);
+
                 x += w + padding;
-                if (h > rowMaxHeight) {
-                    rowMaxHeight = h;
-                }
+                if (h > rowMaxHeight) rowMaxHeight = h;
             });
-            showNotification("Bubbles Arranged!", "success");
-            saveBubblesState(); // Save the new positions implicitly
+
+            if (overflowed) {
+                debugLog('warn', '[Arrange] bubbles do not all fit on screen; some were pushed into the last row');
+                showNotification("Arranged, but they don't all fit -- try zooming out or closing a few.", "info");
+            } else {
+                showNotification("Bubbles Arranged!", "success");
+            }
+            saveBubblesState();
         }
         
          // NEW: Clear All Bubbles Function
