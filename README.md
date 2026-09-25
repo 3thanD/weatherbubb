@@ -34,7 +34,7 @@ out of it.
 | **Weather** | Current conditions + 7-day forecast for a ZIP code | Open-Meteo (keyless) |
 | **Stock** | Any ticker — `NVDA`, `BRK.B`, `SPY` | Yahoo Finance, via relay |
 | **Crypto** | Any coin by name — `bitcoin`, `cardano` | CoinGecko (keyless) |
-| **News** | Headlines by topic | Google News RSS, via relay |
+| **News** | Headlines by topic | BBC first, then NPR or Ars Technica, Google News last |
 | **Reddit** | Last 10 posts of any subreddit | `reddit.com/r/<sub>/.rss`, via relay |
 | **RSS Feed** | Any RSS or Atom feed | The feed itself, direct or via relay |
 | **Web Search** | Google / DuckDuckGo / Bing, plus site searches | Nothing — goes straight to the engine |
@@ -86,10 +86,11 @@ credential; nothing leaves your machine unless you paste it somewhere.
 
 ## The relay (Cloudflare Worker)
 
-Some sources — Yahoo Finance, Google News, ZenQuotes, Reddit — send no CORS
-headers, so a static page cannot read them however well-formed the request is.
-The worker in [`worker/`](worker/) is a narrow relay that fetches those on the
-page's behalf.
+Some sources — Yahoo Finance, ZenQuotes, ESPN — send no CORS headers, so a
+static page cannot read them however well-formed the request is. The worker in
+[`worker/`](worker/) is a narrow relay that fetches those on the page's behalf.
+News and Reddit are **not** on that host allowlist: both are plain RSS, so they
+go through the `/feed` path below, which is fenced by the feed rules instead.
 
 It was written after every free public CORS proxy the app relied on failed:
 corsproxy.io started returning 401 on everything, codetabs burned its full
