@@ -215,7 +215,7 @@ Stated plainly, because each is a platform constraint rather than a to-do:
 ## Supporters
 
 WeatherBubb has no ads and no tracking, and it stays that way. If you'd like to
-support it, the Donate button in the menu has the link.
+support it: [buy me a coffee](https://buymeacoffee.com/3thand).
 
 The supporters list in `supporters.json` is **curated by hand**, not submitted
 through the site. That's deliberate. A public form that publishes a name and a
@@ -223,8 +223,9 @@ link is a backlink farm, and it gets found by automated spam within days — and
 nothing in a browser can verify that a typed amount matches a payment that
 actually happened. Every entry on that list is one that really occurred.
 
-Donated and want to be listed? Reply to your PayPal receipt with the name and
-link you'd like shown. Links are published `rel="nofollow"`.
+Buy Me a Coffee keeps its own supporters wall with verified amounts, which is
+the better list of the two. `supporters.json` is for anyone who'd like a
+mention here as well. Links are published `rel="nofollow"`.
 
 ## Contributing
 
