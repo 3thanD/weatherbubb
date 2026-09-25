@@ -2055,7 +2055,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0403';
+        const BUILD_ID = '2026-09-25-0406';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -5309,59 +5309,94 @@
         // NEW: Arrange Bubbles Function
         function arrangeBubbles() {
             const bodies = Composite.allBodies(matterWorld).filter(b => bubbleMap.has(b.id));
-            bodies.sort((a, b) => a.id - b.id); // Stable order
+            if (!bodies.length) return;
 
-            const padding = 20 * currentScale;
-            const containerWidth = contentWidth;
-            let x = padding;
-            let y = padding;
-            let rowMaxHeight = 0;
-            let overflowed = false;
+            const padding = Math.round(16 * currentScale);
 
-            bodies.forEach(body => {
+            // Measure first. Saved sizes are only as fresh as whatever last
+            // wrote them, and content-fitting changes heights after the fact.
+            const items = bodies.map(body => {
                 const bubble = bubbleMap.get(body.id);
-
-                // Measure the element, don't trust the saved data. This read
-                // its width and height out of bubbleData, which is only as
-                // fresh as the last thing that wrote it -- so a bubble that
-                // had grown (content-fitting does exactly that) was laid out
-                // at its old size and the next row started on top of it.
-                // offsetWidth/offsetHeight are what is actually on screen.
                 const w = bubble.offsetWidth || body.customWidth || BUBBLE_DEFAULT_WIDTH;
                 const h = bubble.offsetHeight || body.customHeight || BUBBLE_DEFAULT_HEIGHT;
-
-                // The render loop positions each bubble from customWidth/Height,
-                // so a mismatch with the element places it somewhere other than
-                // where it was measured. Re-sync while we're here.
-                if (Math.abs((body.customWidth || 0) - w) > 1 || Math.abs((body.customHeight || 0) - h) > 1) {
-                    body.customWidth = w;
-                    body.customHeight = h;
-                }
-
-                if (x + w + padding > containerWidth && x > padding) {
-                    x = padding;
-                    y += rowMaxHeight + padding;
-                    rowMaxHeight = 0;
-                }
-
-                if (y + h > contentHeight) overflowed = true;
-
-                // Clamped, so nothing is placed off screen even when the
-                // bubbles genuinely don't all fit. Overlap is recoverable --
-                // a bubble parked outside the viewport is not.
-                Body.setPosition(body, clampBodyPosition(x + w / 2, y + h / 2, w, h));
-                Body.setVelocity(body, { x: 0, y: 0 });
-                Body.setAngularVelocity(body, 0);
-
-                x += w + padding;
-                if (h > rowMaxHeight) rowMaxHeight = h;
+                // The render loop positions from customWidth/Height, so a
+                // mismatch would place the bubble somewhere other than where
+                // it was measured.
+                body.customWidth = w;
+                body.customHeight = h;
+                return { body, bubble, w, h, id: body.id };
             });
 
-            if (overflowed) {
-                debugLog('warn', '[Arrange] bubbles do not all fit on screen; some were pushed into the last row');
-                showNotification("Arranged, but they don't all fit -- try zooming out or closing a few.", "info");
-            } else {
+            // Skyline packing rather than rows.
+            //
+            // Row packing gives every row the height of its tallest member,
+            // so one 500px bubble made a whole row of 200px ones reserve
+            // 500px, and eight bubbles "didn't fit" on a screen with room to
+            // spare. This tracks the top profile of what's been placed and
+            // drops each bubble at the lowest point it fits, so short ones
+            // tuck under their neighbours.
+            //
+            // Tallest first, because a tall bubble placed late has nowhere
+            // good to go, while short ones fill gaps easily.
+            const order = [...items].sort((a, b) => (b.h - a.h) || (a.id - b.id));
+
+            // Each segment is a span of x with a current top edge.
+            let skyline = [{ x: padding, w: Math.max(1, contentWidth - padding * 2), y: padding }];
+
+            function findSpot(w) {
+                let best = null;
+                for (let i = 0; i < skyline.length; i++) {
+                    const x = skyline[i].x;
+                    if (x + w > contentWidth - padding) continue;
+                    // The bubble rests on the highest point beneath its span.
+                    let y = skyline[i].y;
+                    let spanned = 0;
+                    for (let j = i; j < skyline.length && spanned < w; j++) {
+                        y = Math.max(y, skyline[j].y);
+                        spanned += skyline[j].w;
+                    }
+                    if (spanned < w) continue;   // runs off the right edge
+                    if (!best || y < best.y || (y === best.y && x < best.x)) best = { x, y };
+                }
+                return best;
+            }
+
+            function occupy(x, w, top) {
+                const next = [];
+                for (const seg of skyline) {
+                    const segEnd = seg.x + seg.w;
+                    if (segEnd <= x || seg.x >= x + w) { next.push(seg); continue; }
+                    if (seg.x < x) next.push({ x: seg.x, w: x - seg.x, y: seg.y });
+                    if (segEnd > x + w) next.push({ x: x + w, w: segEnd - (x + w), y: seg.y });
+                }
+                next.push({ x, w, y: top });
+                next.sort((a, b) => a.x - b.x);
+                // Merge neighbours at the same height so the profile stays small.
+                skyline = next.reduce((acc, seg) => {
+                    const last = acc[acc.length - 1];
+                    if (last && last.y === seg.y && last.x + last.w === seg.x) last.w += seg.w;
+                    else acc.push({ ...seg });
+                    return acc;
+                }, []);
+            }
+
+            let lowest = padding;
+            for (const item of order) {
+                const spot = findSpot(item.w) || { x: padding, y: lowest };
+                Body.setPosition(item.body, clampBodyPosition(
+                    spot.x + item.w / 2, spot.y + item.h / 2, item.w, item.h));
+                Body.setVelocity(item.body, { x: 0, y: 0 });
+                Body.setAngularVelocity(item.body, 0);
+                occupy(spot.x, item.w, spot.y + item.h + padding);
+                lowest = Math.max(lowest, spot.y + item.h + padding);
+            }
+
+            const fits = lowest <= contentHeight + 1;
+            if (fits) {
                 showNotification("Bubbles Arranged!", "success");
+            } else {
+                debugLog('warn', `[Arrange] needs ${Math.round(lowest)}px of height, have ${Math.round(contentHeight)}px`);
+                showNotification("Arranged, but they don't all fit -- zoom out or close a few.", "info");
             }
             saveBubblesState();
         }
