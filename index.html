@@ -795,6 +795,26 @@
             gap: 0.25rem; /* gap-1 */
              width: 100%; /* Take full width in sidebar */
         }
+        /* Native <select> popups are painted by the operating system, not by
+           this page, and they take no notice of the sidebar's dark
+           background. Chrome on Windows draws the open list on a light
+           surface while the options inherit the sidebar's light grey text,
+           which comes out grey on grey and is genuinely hard to read.
+
+           Colouring the options themselves is the only hook the page gets
+           into that popup. Applies to every select, including the ones
+           inside bubbles, since they inherit the same light text. The
+           closed control keeps its own colours -- Chrome paints the button
+           face from the select's colour, not the option's. */
+        select option,
+        select optgroup {
+            color: #111827;
+            background-color: #f4f4f5;
+        }
+        select optgroup {
+            font-weight: 700;
+        }
+
          #sidebar #custom-bg-select {
              width: auto; /* Adjust width */
              flex-grow: 1;
@@ -2107,7 +2127,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0515';
+        const BUILD_ID = '2026-09-25-0517';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
