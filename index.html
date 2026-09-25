@@ -148,14 +148,30 @@
             position: absolute;
             right: 0;
             bottom: 0;
-            /* The grab area is the whole corner, not just the marking. A
-               floating bubble is a moving target, so a 24px square meant
-               chasing it; 44px is the usual minimum for a comfortable hit
-               target. Kept clear of bubble content, which is centred --
-               even at the 180px minimum width this reaches only a quarter
-               of the way in. */
-            width: 44px;
-            height: 44px;
+            /* The grab area was a 44px square, on the reasoning that bubble
+               content is centred and would never reach the corner. True of
+               most bubbles, false of the two that mattered: the calculator's
+               keypad is a grid that fills its bubble, so the square sat on
+               top of "=" and "+", and the Quick Links name field ran under
+               it as well. Those controls swallowed nothing -- the handle
+               took the clicks and the keys simply did nothing.
+
+               Measured from the corner, the nearest control centres are the
+               links name field at 17px and "=" at 36px, so the hit area has
+               to stay under 17px to leave every one of them clickable. 16px
+               square it is, matching the grip that is actually drawn, so
+               what you see is what you can grab.
+
+               A triangular clip was tried first, to keep more area while
+               covering only the diagonal. It puts the box's centre exactly
+               on the hypotenuse, where hit-testing is a coin flip, and it
+               made resize-by-drag fail outright. Not worth the cleverness.
+
+               The 44px touch minimum this gives up was never reachable by
+               touch anyway: the handle is display:none below 640px, where
+               bubbles size themselves to the viewport. */
+            width: 16px;
+            height: 16px;
             pointer-events: auto;
             cursor: nwse-resize;
             touch-action: none;
@@ -165,7 +181,7 @@
                square is invisible but grabbable. */
             background-image: linear-gradient(135deg, transparent 0 45%, var(--wb-sidebar-text) 45% 55%, transparent 55% 100%),
                               linear-gradient(135deg, transparent 0 65%, var(--wb-sidebar-text) 65% 75%, transparent 75% 100%);
-            background-size: 20px 20px, 20px 20px;
+            background-size: 16px 16px, 16px 16px;
             background-position: bottom right, bottom right;
             background-repeat: no-repeat;
             border-bottom-right-radius: 1rem;
@@ -2091,7 +2107,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0503';
+        const BUILD_ID = '2026-09-25-0513';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
