@@ -844,6 +844,12 @@
          #sidebar #set-bg-btn {
              padding: 0.25rem 0.5rem; /* Match input height */
              flex-shrink: 0;
+             /* Sidebar buttons are width:100% so they stack as full-width
+                bars. This one shares a line with the URL field, and at 100%
+                it claimed the whole row and pushed itself onto a third line,
+                where a centred "Set" reads as a stray label rather than the
+                field's button. */
+             width: auto;
          }
 
         
@@ -2159,7 +2165,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0554';
+        const BUILD_ID = '2026-09-25-0558';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -5452,6 +5458,26 @@
                  "Slate": "linear-gradient(160deg, #111827 0%, #374151 100%)",
              };
 
+             // Woven out of repeating-gradient layers rather than fetched as
+             // images. They cost nothing to load, never 404, and keep the
+             // promise that opening the dashboard contacts no one. The last
+             // layer in each is an opaque base, because setBackground only
+             // sets background-image -- there is no background-color behind
+             // these to show through.
+             const patterns = {
+                 "Red Flannel":
+                     "repeating-linear-gradient(90deg, rgba(0,0,0,0.45) 0 28px, rgba(0,0,0,0) 28px 56px), repeating-linear-gradient(0deg, rgba(0,0,0,0.45) 0 28px, rgba(0,0,0,0) 28px 56px), repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 4px, rgba(0,0,0,0) 4px 56px), repeating-linear-gradient(0deg, rgba(255,255,255,0.10) 0 4px, rgba(0,0,0,0) 4px 56px), linear-gradient(#7f1d1d, #7f1d1d)",
+                 "Forest Flannel":
+                     "repeating-linear-gradient(90deg, rgba(0,0,0,0.42) 0 34px, rgba(0,0,0,0) 34px 68px), repeating-linear-gradient(0deg, rgba(0,0,0,0.42) 0 34px, rgba(0,0,0,0) 34px 68px), repeating-linear-gradient(90deg, rgba(240,240,240,0.16) 0 3px, rgba(0,0,0,0) 3px 68px), repeating-linear-gradient(0deg, rgba(240,240,240,0.16) 0 3px, rgba(0,0,0,0) 3px 68px), linear-gradient(#14532d, #14532d)",
+                 "Violet Tartan":
+                     "repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0 2px, rgba(0,0,0,0) 2px 44px), repeating-linear-gradient(-45deg, rgba(255,255,255,0.10) 0 2px, rgba(0,0,0,0) 2px 44px), repeating-linear-gradient(45deg, rgba(0,0,0,0.30) 0 31px, rgba(0,0,0,0) 31px 62px), repeating-linear-gradient(-45deg, rgba(0,0,0,0.30) 0 31px, rgba(0,0,0,0) 31px 62px), linear-gradient(#3b0764, #3b0764)",
+                 "Blueprint":
+                     "repeating-linear-gradient(0deg, rgba(255,255,255,0.22) 0 1px, rgba(0,0,0,0) 1px 48px), repeating-linear-gradient(90deg, rgba(255,255,255,0.22) 0 1px, rgba(0,0,0,0) 1px 48px), repeating-linear-gradient(0deg, rgba(255,255,255,0.08) 0 1px, rgba(0,0,0,0) 1px 12px), repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0 1px, rgba(0,0,0,0) 1px 12px), linear-gradient(#0b2a5b, #0b2a5b)",
+                 "Carbon Fiber":
+                     "repeating-linear-gradient(-45deg, rgba(255,255,255,0.05) 0 3px, rgba(0,0,0,0) 3px 6px), repeating-linear-gradient(45deg, #1c1c1c 0 3px, #262626 3px 6px), linear-gradient(#171717, #171717)",
+                 "Denim":
+                     "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 2px, rgba(0,0,0,0) 2px 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,0.14) 0 2px, rgba(0,0,0,0) 2px 4px), linear-gradient(160deg, #1e3a5f, #24405f)",
+             };
              const presets = {
                  "Night Sky": "https://images.unsplash.com/photo-1506703719100-a0f375804b6c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
                  "Abstract Waves": "https://images.unsplash.com/photo-1554034483-04fda0d3507b?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80",
@@ -5467,6 +5493,10 @@
              optionsHTML += '<optgroup label="Gradients (always available)">';
              for (const name in gradients) {
                  optionsHTML += `<option value="${gradients[name]}">${name}</option>`;
+             }
+             optionsHTML += '</optgroup><optgroup label="Patterns (nothing to download)">';
+             for (const name in patterns) {
+                 optionsHTML += `<option value="${patterns[name]}">${name}</option>`;
              }
              optionsHTML += '</optgroup><optgroup label="Photos (external, may change)">';
              for (const name in presets) {
@@ -6188,7 +6218,11 @@
          // preloaded with an Image(), and wrapping it in url() would break
          // it outright.
          function isGradient(value) {
-             return /^(linear|radial|conic)-gradient\(/.test(String(value).trim());
+             // repeating-* included: the pattern presets (flannel, blueprint,
+             // denim) are built from repeating-linear-gradient layers, and
+             // without this they fall through to the image-URL path and get
+             // probed with new Image(), which can never load them.
+             return /^(repeating-)?(linear|radial|conic)-gradient\(/.test(String(value).trim());
          }
          function backgroundCssFor(value) {
              return isGradient(value) ? value : `url("${value}")`;
