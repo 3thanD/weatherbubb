@@ -2091,7 +2091,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0457';
+        const BUILD_ID = '2026-09-25-0503';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -3586,6 +3586,63 @@
                 </div>`;
         }
 
+        // A four-function expression evaluator, so the calculator doesn't need
+        // eval(). The display is readonly and only button text can reach it, so
+        // eval was never actually exploitable here -- but it is the first thing
+        // anyone greps for in a repo, and arguing about it costs more than
+        // replacing it did. Shunting-yard, left-associative, unary minus
+        // allowed only where an operand is expected.
+        function evaluateExpression(input) {
+            const text = String(input).trim();
+            // Reject anything outside the character set rather than letting the
+            // tokenizer quietly skip it. Nothing here could ever execute, but
+            // "alert(1)" silently evaluating to 1 is the sort of thing that
+            // reads like a bug in a screenshot.
+            if (!/^[\d.+\-*/%\s]+$/.test(text)) throw new Error('bad characters');
+            const tokens = text.match(/\d*\.?\d+|[-+*/%]/g);
+            if (!tokens) throw new Error('empty');
+
+            const PRECEDENCE = { '+': 1, '-': 1, '*': 2, '/': 2, '%': 2 };
+            const values = [];
+            const operators = [];
+            let expectOperand = true;
+
+            const applyTop = () => {
+                const op = operators.pop();
+                const b = values.pop();
+                const a = values.pop();
+                if (a === undefined || b === undefined) throw new Error('malformed');
+                switch (op) {
+                    case '+': values.push(a + b); break;
+                    case '-': values.push(a - b); break;
+                    case '*': values.push(a * b); break;
+                    case '/': values.push(a / b); break;
+                    case '%': values.push(a % b); break;
+                }
+            };
+
+            for (const token of tokens) {
+                if (token in PRECEDENCE) {
+                    if (expectOperand) {
+                        // Unary: only minus makes sense, and only as a sign.
+                        if (token !== '-') throw new Error('malformed');
+                        values.push(0);
+                    } else {
+                        while (operators.length && PRECEDENCE[operators[operators.length - 1]] >= PRECEDENCE[token]) applyTop();
+                    }
+                    operators.push(token);
+                    expectOperand = true;
+                } else {
+                    values.push(parseFloat(token));
+                    expectOperand = false;
+                }
+            }
+            if (expectOperand) throw new Error('trailing operator');
+            while (operators.length) applyTop();
+            if (values.length !== 1 || !Number.isFinite(values[0])) throw new Error('not finite');
+            return values[0];
+        }
+
         function buildCalculatorBubble(contentWrapper) {
             contentWrapper.innerHTML = `
                 <div class="bubble-content-view p-2">
@@ -3626,7 +3683,7 @@
                 } else if (key === '=') {
                     try {
                         // Basic safety eval
-                        let result = eval(display.value.replace(/[^-+\/*%.0-9]/g, ''));
+                        const result = evaluateExpression(display.value);
                         display.value = parseFloat(result.toFixed(5));
                     } catch {
                         display.value = 'Error';
@@ -3635,7 +3692,7 @@
                     display.value = display.value.slice(0, -1);
                 } else if (key === '%') {
                     try {
-                        display.value = parseFloat(eval(display.value) / 100);
+                        display.value = parseFloat(evaluateExpression(display.value) / 100);
                     } catch { /* ignore */ }
                 } else {
                     display.value += key;
