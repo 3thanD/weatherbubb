@@ -12,7 +12,7 @@ rearrange.
 It is a single HTML file plus one small Cloudflare Worker. No build step, no
 framework, no database, no accounts, no tracking.
 
-![WeatherBubb — a dashboard of floating bubbles](docs/screenshots/dashboard-beach.webp)
+![WeatherBubb — a dashboard of floating bubbles: a merged three-stock ticker, weather, a subreddit feed, quick links, a to-do list, a timer and a quote](docs/screenshots/dashboard-beach.webp)
 
 ---
 

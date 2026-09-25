@@ -4,7 +4,7 @@ Referenced from the project README.
 
 | File | Shows |
 |---|---|
-| `dashboard-beach.webp` | A full dashboard — to-do, clock, timer, quick links, quote, 7-day forecast, an r/techsupport feed and three tickers |
+| `dashboard-beach.webp` | A full dashboard — merged three-stock ticker, weather, r/techsupport feed, quick links, to-do, timer, quote |
 | `dashboard-forest.webp` | Merged stock bubble, to-do list, quick links, timer, quote |
 | `sidebar.webp` | The menu open: settings, themes, layout controls |
 
@@ -30,3 +30,10 @@ im.resize((w, round(im.height * w / im.width)), Image.LANCZOS).save(
     'docs/screenshots/name.webp', 'WEBP', quality=88, method=6)
 "
 ```
+
+## Before you take one
+
+Hard-refresh first. The first screenshot committed here was taken on a build
+whose 7-day forecast icons were broken, so the repo's front page advertised
+the bug for a few hours. Check the build stamp at the bottom of the menu
+matches the latest commit before shooting.
