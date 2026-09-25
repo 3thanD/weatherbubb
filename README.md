@@ -12,6 +12,8 @@ rearrange.
 It is a single HTML file plus one small Cloudflare Worker. No build step, no
 framework, no database, no accounts, no tracking.
 
+![WeatherBubb dashboard](docs/screenshots/dashboard-space.png)
+
 ---
 
 ## Try it
@@ -47,6 +49,8 @@ out of it.
 | **Timer / Countdown** | Counts down to or from | Your device |
 | **Note / To-do / Calculator / Image** | Local tools | You |
 
+![Merged stock bubble, to-do list, quick links and a timer](docs/screenshots/dashboard-forest.png)
+
 ### Things the bubbles do
 
 - **Merge** — drag the two-circles handle from one bubble onto another and
@@ -59,6 +63,8 @@ out of it.
 - **Sleep** — dim and freeze a bubble without closing it.
 
 ---
+
+![The settings menu](docs/screenshots/sidebar.png)
 
 ## Sync between computers
 
