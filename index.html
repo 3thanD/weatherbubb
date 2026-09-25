@@ -2107,7 +2107,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0513';
+        const BUILD_ID = '2026-09-25-0515';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -2597,6 +2597,41 @@
         }
 
         // Quote (via ZenQuotes) - FIXED
+        // ZenQuotes rate-limits by IP, and the relay reaches it from a shared
+        // Cloudflare address, so the request sometimes just hangs until the
+        // 8s timeout fires. A quote is the one thing on this dashboard that
+        // does not need to be current, so rather than show an error we keep
+        // the last one that arrived and fall back to it.
+        const QUOTE_CACHE_KEY = 'lastGoodQuote';
+
+        // Last resort, for a first visit that fails before anything is cached.
+        // Deliberately short, and every one of these is something the named
+        // person demonstrably wrote or said -- the internet is full of quote
+        // lists that are mostly misattributions, and shipping one of those in
+        // a bubble labelled "Quote of the Day" would be its own small
+        // embarrassment.
+        const FALLBACK_QUOTES = [
+            { content: 'The unexamined life is not worth living.', author: 'Socrates' },
+            { content: 'Whereof one cannot speak, thereof one must be silent.', author: 'Ludwig Wittgenstein' },
+            { content: 'Man is condemned to be free.', author: 'Jean-Paul Sartre' },
+            { content: 'The only thing we have to fear is fear itself.', author: 'Franklin D. Roosevelt' },
+            { content: 'Premature optimization is the root of all evil.', author: 'Donald Knuth' },
+            { content: 'The best way out is always through.', author: 'Robert Frost' },
+            { content: 'Not all those who wander are lost.', author: 'J.R.R. Tolkien' },
+        ];
+
+        function cachedOrFallbackQuote(reason) {
+            try {
+                const stored = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY) || 'null');
+                if (stored && stored.content) {
+                    debugLog('warn', `[Quote] ${reason} -- showing the last quote that loaded, from ${stored.saved || 'an earlier visit'}.`);
+                    return { content: stored.content, author: stored.author };
+                }
+            } catch (e) { /* unreadable storage is not worth a second failure */ }
+            debugLog('warn', `[Quote] ${reason} -- nothing cached yet, so showing a built-in quote.`);
+            return FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)];
+        }
+
         async function getQuoteData(tag) {
             // Using ZenQuotes API which is more reliable with CORS.
             // Note: The 'tag' parameter is not supported by this free endpoint, so it will be ignored.
@@ -2606,7 +2641,7 @@
             try {
                 raw = await fetchViaProxy(url, 'Quote');
             } catch (e) {
-                throw new Error("Could not fetch quote (proxy error).");
+                return cachedOrFallbackQuote('every fetch attempt failed');
             }
 
             // Attempt to parse the contents safely
@@ -2614,18 +2649,22 @@
              try {
                 data = JSON.parse(raw);
              } catch (e) {
-                 console.error("Failed to parse quote API response:", raw);
-                 throw new Error("Quote API returned invalid data.");
+                 return cachedOrFallbackQuote('the response was not valid JSON');
              }
-
 
             // Data is an array with one quote object
             if (!data || data.length === 0 || !data[0].q) {
-                console.error("Quote API failed, response:", data);
-                throw new Error("Quote API failed to return content.");
+                return cachedOrFallbackQuote('the response carried no quote');
             }
+
+            const quote = { content: data[0].q, author: data[0].a };
+            try {
+                localStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify({
+                    ...quote, saved: new Date().toLocaleDateString(),
+                }));
+            } catch (e) { /* a full or blocked store just means no fallback next time */ }
             // Standardize the output to match the old format { content: "...", author: "..." }
-            return { content: data[0].q, author: data[0].a };
+            return quote;
         }
 
         // --- Physics Engine Setup ---
