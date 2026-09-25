@@ -1832,7 +1832,18 @@
 
         let notificationTimeout;
         let isLoadingState = true;
-        let currentScale = 1;
+        // Midpoint of the slider's 0.5-1.5 range: room to zoom in or out
+        // from the default rather than starting at one end.
+        const DEFAULT_ZOOM = 1;
+
+        function readStoredZoom() {
+            let v = NaN;
+            try { v = parseFloat(localStorage.getItem('dashboardZoom')); } catch { }
+            if (!Number.isFinite(v)) return DEFAULT_ZOOM;
+            return Math.max(0.5, Math.min(1.5, v));
+        }
+
+        let currentScale = readStoredZoom();
         // Bumped at the start of every loadBubblesState() call and by the
         // "Clear All Bubbles" button, so a staggered batch of bubble
         // creations still in flight (see loadBubblesState) can tell it's
@@ -2044,7 +2055,7 @@
         // succeeded -- indistinguishable, from the user's side, from the
         // change never having shipped. This makes that state visible
         // rather than something to guess at.
-        const BUILD_ID = '2026-09-25-0359';
+        const BUILD_ID = '2026-09-25-0403';
 
         // Paste a PayPal.Me / Ko-fi / Buy Me a Coffee link here to switch the
         // Donate button on. Empty means the button says so plainly rather
@@ -5113,28 +5124,23 @@
             // an old saved width against today's (much wider, mobile-sized)
             // BUBBLE_DEFAULT_WIDTH would read as a huge zoom-out that the
             // user never actually chose, and silently shrink every bubble.
-            if (savedBubbles.length > 0 && !isMobileViewport) {
-                 const avgZoom = savedBubbles.reduce((acc, b) => {
-                    const data = JSON.parse(b);
-                    // Use a base size to calculate zoom ratio
-                    let baseWidth = BUBBLE_DEFAULT_WIDTH;
-                     let baseHeight = BUBBLE_DEFAULT_HEIGHT;
-                    if (data.type === 'news' || data.type === 'reddit') baseHeight = BUBBLE_NEWS_HEIGHT;
-                    if (data.type === 'todo') baseHeight = BUBBLE_TODO_HEIGHT;
-
-                    // Average zoom based on width OR height, whichever is more scaled
-                    const widthZoom = (data.width || baseWidth) / baseWidth;
-                    const heightZoom = (data.height || baseHeight) / baseHeight;
-
-                    // Ensure zoom isn't calculated from tiny values if somehow saved incorrectly
-                     if (isNaN(widthZoom) || isNaN(heightZoom) || widthZoom < 0.1 || heightZoom < 0.1) return acc; 
-
-                    return acc + Math.max(widthZoom, heightZoom); 
-                }, 0) / savedBubbles.length;
-                
-                const clampedAvgZoom = Math.max(0.5, Math.min(1.5, avgZoom || 1)); // Ensure it's not NaN
-                zoomSlider.value = clampedAvgZoom;
-                currentScale = clampedAvgZoom; // Set initial scale
+            // Zoom is a stored setting, not something to reverse-engineer.
+            //
+            // This used to infer it on load by averaging each bubble's saved
+            // size against its type's default, on the theory that a bubble
+            // bigger than default meant the user had zoomed in. That was
+            // always shaky, and content-fitting broke it outright: bubbles
+            // now grow to fit what's in them, so the ratio reads as "zoomed
+            // in" and the average clamps at the 1.5 maximum. The slider
+            // arrived pegged to the top on every load.
+            //
+            // dashboardZoom was already listed among the synced keys but
+            // nothing ever wrote it, so zoom was never actually remembered.
+            // Now it is.
+            if (!isMobileViewport) {
+                const stored = readStoredZoom();
+                zoomSlider.value = stored;
+                currentScale = stored;
             }
             
             // Staggered rather than a bare .map() (all fired in the same
@@ -5887,6 +5893,7 @@
         // NEW Zoom Slider Logic (uses 'change' not 'input' to run once)
         zoomSlider.addEventListener('change', (e) => {
             const newScale = parseFloat(e.target.value);
+            try { localStorage.setItem('dashboardZoom', String(newScale)); } catch { }
             applyZoom(newScale);
         });
 
@@ -6148,6 +6155,8 @@
             const savedTheme = localStorage.getItem('dashboardTheme') || DEFAULT_THEME;
             themeSelect.value = savedTheme;
             document.body.classList.toggle('theme-bonappel', savedTheme === 'bonappel');
+
+            zoomSlider.value = readStoredZoom();
 
             const savedScrollSide = localStorage.getItem('scrollBarSide') || 'right';
             scrollSideSelect.value = savedScrollSide;
