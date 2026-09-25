@@ -43,9 +43,10 @@ const ALLOWED_TARGET_HOSTS = new Set([
 ]);
 
 const ALLOWED_ORIGINS = new Set([
-  // Both are live targets: github.io serves the site today, and
-  // weatherbubb.com takes over once its DNS points at GitHub Pages. Having
-  // both here means the cutover needs no worker redeploy.
+  // All three are live. weatherbubb.com is the address people use; the
+  // github.io URL still serves the same Pages deployment, and browsers send
+  // whichever one the tab was opened from as the Origin. Dropping either
+  // would break the relay for anyone on that URL.
   'https://3thand.github.io',
   'https://weatherbubb.com',
   'https://www.weatherbubb.com',
